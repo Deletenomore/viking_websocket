@@ -1,0 +1,102 @@
+.chat-interface {
+  font-family: Arial, sans-serif;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.chat-interface h1 {
+  font-size: 1.5rem;
+  color: #333;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.messages {
+  height: 200px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #fff;
+}
+
+.messages p {
+  margin: 0 0 10px;
+}
+
+.messages strong {
+  color: #007bff;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+button {
+  background-color: #007bff;
+  color: #fff;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+.voice-chat,
+.breakout-rooms {
+  margin-top: 20px;
+}
+
+.voice-chat h2,
+.breakout-rooms h2 {
+  font-size: 1.25rem;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+audio {
+  display: block;
+  margin: 10px 0;
+}
+
+button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+audio {
+  width: 100%;
+}
+
+.breakout-rooms button {
+  background-color: #28a745;
+}
+
+.breakout-rooms button:hover {
+  background-color: #218838;
+}
+
+.breakout-rooms button:last-child {
+  background-color: #dc3545;
+  margin-left: 10px;
+}
+
+.breakout-rooms button:last-child:hover {
+  background-color: #c82333;
+}

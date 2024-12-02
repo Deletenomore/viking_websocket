@@ -50,7 +50,7 @@ const ChannelSidebar = ({ selectedRoom, channels, selectedChannel, onChannelSele
         {selectedRoom.is_admin && (
           <button
             className={`btn btn-link p-0 px-2 ${theme === 'dark' ? 'text-light' : 'text-dark'}`}
-            onClick={() => handleCreateChannel(category.id)} // Make sure this is passing category.id
+            onClick={() => handleCreateChannel(category.id)}
             title="Create new channel"
           >
             <i className="bi bi-plus"></i>
@@ -70,7 +70,7 @@ const ChannelSidebar = ({ selectedRoom, channels, selectedChannel, onChannelSele
         <h6 className="mb-0">{selectedRoom.name}</h6>
         {selectedRoom.is_admin && (
           <button className="btn btn-success btn-sm" onClick={handleCreateCategory} title="Create new category">
-            <i className="bi bi-folder-plus"></i>
+            <i className="bi bi-plus"></i>
           </button>
         )}
       </div>

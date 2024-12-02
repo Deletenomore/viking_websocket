@@ -6,11 +6,10 @@ const ThreadList = ({ selectedChannel, threads, onThreadSelect, onCreateThread, 
   return (
     <div className="h-100 d-flex flex-column">
       <div className="p-3 border-bottom">
-        <div className="d-flex align-items-center" style={{ paddingRight: '70px' }}>
-          <i className="bi bi-hash me-2"></i>
-          <h5 className="mb-0 me-3">{selectedChannel.name}</h5>
-          <button onClick={onCreateThread} className="btn btn-success btn-sm" title="Create New Thread">
-            <i className="bi bi-chat-dots"></i>
+        <div className="d-flex justify-content-between align-items-center">
+          <h5 className="mb-0">#{selectedChannel.name}</h5>
+          <button onClick={onCreateThread} className="btn btn-success">
+            New Thread
           </button>
         </div>
       </div>
@@ -19,7 +18,7 @@ const ThreadList = ({ selectedChannel, threads, onThreadSelect, onCreateThread, 
           {threads.map((thread) => (
             <div
               key={thread.id}
-              className={`card ${theme === 'dark' ? 'bg-mid-dark text-light' : ''}`}
+              className={`card ${theme === 'dark' ? 'bg-mid-dark' : ''}`}
               onClick={() => onThreadSelect(thread)}
               style={{ cursor: 'pointer' }}
             >
@@ -36,7 +35,7 @@ const ThreadList = ({ selectedChannel, threads, onThreadSelect, onCreateThread, 
                   <div>
                     <h6 className="card-title">{thread.subject}</h6>
                     <p className="card-text small">{thread.first_post_content}</p>
-                    <div className={`small ${theme === 'dark' ? 'text-light-emphasis' : 'text-muted'}`}>
+                    <div className="text-muted small">
                       {thread.author_email ? `Posted by ${thread.author_email}` : 'Anonymous'} ·{' '}
                       {new Date(thread.created_at).toLocaleDateString()}
                     </div>
