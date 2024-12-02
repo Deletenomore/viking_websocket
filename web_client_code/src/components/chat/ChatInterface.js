@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import useWebSocket from 'react-use-websocket';
+import VideoChat from '../chat/VideoChat';
 
 const ChatInterface = () => {
   const location = useLocation();
@@ -120,11 +121,14 @@ const ChatInterface = () => {
           style={{ margin: '10px', width: '80%' }}
         />
         <button onClick={handleSendMessage}>Send</button>
-
-      
       </div>
 
-
+      <div>
+      {/* Other chat interface components */}
+      {userId && (
+        <VideoChat sendJsonMessage={sendJsonMessage} lastJsonMessage={lastJsonMessage} userId={userId} />
+      )}
+      </div>
 
      
     </div>

@@ -1,19 +1,33 @@
-// part of backend
-// services/roomService.js
 const path = require('path');
 const fs = require('fs');
 
-exports.destroyRoom = async (transaction, roomId) => {
+// Mock data for rooms
+const mockRooms = [
+  { id: 1, name: 'Room 1', url_name: 'room-1', thumbnail_url: '/uploads/room1.png' },
+  { id: 2, name: 'Room 2', url_name: 'room-2', thumbnail_url: '/uploads/room2.png' },
+];
+
+// Function to destroy a room (mock logic)
+exports.destroyRoom = async (roomId) => {
   try {
-    const roomData = await transaction.query('SELECT thumbnail_url FROM rooms WHERE id = $1', [roomId]);
+    // Find the room in the mock data
+    const roomIndex = mockRooms.findIndex((room) => room.id === roomId);
+    if (roomIndex === -1) {
+      throw new Error('Room not found');
+    }
 
-    await transaction.query('DELETE FROM room_members WHERE room_id = $1', [roomId]);
-    await transaction.query('DELETE FROM rooms WHERE id = $1', [roomId]);
+    const roomData = mockRooms[roomIndex];
 
-    if (roomData.rows[0]?.thumbnail_url) {
-      const thumbnailPath = path.join(__dirname, '..', 'public', roomData.rows[0].thumbnail_url);
+    // Remove room from mock data
+    mockRooms.splice(roomIndex, 1);
+
+    // Delete the thumbnail file (if exists)
+    if (roomData?.thumbnail_url) {
+      const thumbnailPath = path.join(__dirname, '..', 'public', roomData.thumbnail_url);
       fs.unlink(thumbnailPath, (err) => {
-        if (err) console.error('Error deleting thumbnail:', err);
+        if (err) {
+          console.error('Error deleting thumbnail:', err);
+        }
       });
     }
 
@@ -22,4 +36,9 @@ exports.destroyRoom = async (transaction, roomId) => {
     console.error('Error destroying room:', error);
     throw error;
   }
+};
+
+// Export other mock room operations if needed
+exports.getAllRooms = () => {
+  return mockRooms;
 };

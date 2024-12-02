@@ -73,38 +73,40 @@ wss.on('connection', (ws) => {
           break;
         }
 
-       //Toggle voice chat 
-        case 'toggle-voice-chat': {
-          voiceChatOn = !voiceChatOn; // Toggle the voice chat state
-          users[userId].voiceChatOn = voiceChatOn; // Update the voice chat status
-          const currentUser = users[userId];
-          console.log(`User ${userId} toggled voice chat: ${currentUser.voiceChatOn ? 'on' : 'off'}`);
-          broadcast({
-            type: 'voice-chat-status',
-            userId,
-            voiceChatOn: currentUser.voiceChatOn,
-          });
+        case 'start-broadcast': {
+          console.log(`User ${userId} started broadcasting`);
+          
+          // Notify all other users with additional metadata
+          broadcastToOthers({ 
+            type: 'start-broadcast', 
+            senderId: userId, 
+            message: 'Broadcast is starting. Prepare for WebRTC offers.' 
+          }, userId);
+          
           break;
         }
+        
 
-        // New: Handle WebRTC signaling
+        // Handle WebRTC signaling
         case 'offer': {
-          console.log(`Broadcasting offer from ${userId}`);
-          sendToAllUsers({ type: 'offer', sdp: data.sdp, from: userId }, userId);
+          console.log(`Broadcasting offer from ${userId} to ${data.recipientId}`);
+          sendToUser(data.recipientId, { type: 'offer', offer: data.offer, senderId: userId });
           break;
         }
         
         case 'answer': {
-          console.log(`Broadcasting answer from ${userId}`);
-          sendToAllUsers({ type: 'answer', sdp: data.sdp, from: userId }, userId);
+          console.log(`Broadcasting answer from ${userId} to ${data.recipientId}`);
+          sendToUser(data.recipientId, { type: 'answer', answer: data.answer, senderId: userId });
           break;
         }
         
         case 'ice-candidate': {
-          console.log(`Broadcasting ICE candidate from ${userId}`);
-          sendToAllUsers({ type: 'ice-candidate', candidate: data.candidate, from: userId }, userId);
+          console.log(`Broadcasting ICE candidate from ${userId} to ${data.recipientId}`);
+          sendToUser(data.recipientId, { type: 'ice-candidate', candidate: data.candidate, senderId: userId });
           break;
         }
+        
+        
         
         
         default:
@@ -132,21 +134,28 @@ wss.on('connection', (ws) => {
     });
   }
 
-  function sendToAllUsers(data, excludeUserId) {
-    Object.keys(users).forEach((userId) => {
-      if (userId !== excludeUserId) { // Exclude the sender
-        const user = users[userId];
-        if (user.ws.readyState === WebSocket.OPEN) {
+    // Helper function to broadcast messages to all users except the sender
+    function broadcastToOthers(data, excludeUserId) {
+      Object.keys(users).forEach((userId) => {
+        if (userId !== excludeUserId && users[userId].ws.readyState === WebSocket.OPEN) {
           try {
-            user.ws.send(JSON.stringify(data));
-            console.log(`Sent data to user ${userId}:`, data);
-          } catch (error) {
-            console.error(`Failed to send data to user ${userId}:`, error.message);
+            console.log(`Sending message to user: ${userId}`);
+            users[userId].ws.send(JSON.stringify(data));
+          } catch (sendError) {
+            console.error(`Failed to send message to user ${userId}`, sendError);
           }
         }
+      });
+    }
+    
+  
+    // Helper function to send a message to a specific user
+    function sendToUser(recipientId, data) {
+      const recipient = users[recipientId];
+      if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+        recipient.ws.send(JSON.stringify(data));
       }
-    });
-  }
+    }
   
 });
 
