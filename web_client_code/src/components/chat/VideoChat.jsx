@@ -1,13 +1,23 @@
 import React, { useRef, useState, useEffect } from 'react';
 
-const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId }) => {
+const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId, username }) => {
   const localVideoRef = useRef(null);
   const remoteVideoRefs = useRef({});
   const localStream = useRef(null);
   const peerConnections = useRef({});
-  const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+  const iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { 
+      urls: 'turn:turn.example.com', 
+      credential: 'webrtc',
+      username: 'webrtc'
+    }
+  ];
+  
   const [isMicOn, setIsMicOn] = useState(false);
   const [isCamOn, setIsCamOn] = useState(false);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [availableBroadcasters, setAvailableBroadcasters] = useState([]);
 
   // Initialize media stream
   useEffect(() => {
@@ -23,17 +33,24 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId }) => {
         console.error('Error accessing media devices:', error);
       }
     };
-
+  
     initMediaStream();
-
+  
     return () => {
+      // Copy `peerConnections.current` to a variable before using in cleanup
+      const connections = peerConnections.current;
+  
       if (localStream.current) {
         localStream.current.getTracks().forEach((track) => track.stop());
       }
+  
+      Object.values(connections).forEach((pc) => {
+        pc.close();
+      });
     };
   }, []);
 
-  // Handle microphone toggle
+  // Toggle microphone
   const toggleMic = () => {
     const audioTrack = localStream.current?.getAudioTracks()[0];
     if (audioTrack) {
@@ -42,7 +59,7 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId }) => {
     }
   };
 
-  // Handle camera toggle
+  // Toggle camera
   const toggleCam = () => {
     const videoTrack = localStream.current?.getVideoTracks()[0];
     if (videoTrack) {
@@ -52,55 +69,122 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId }) => {
   };
 
   // Start broadcasting
-  const startBroadcast = () => {
+  const startBroadcast = async () => {
+    if (!localStream.current) return;
+
     sendJsonMessage({ type: 'start-broadcast' });
+    setIsBroadcasting(true);
   };
 
-  // Handle incoming offer
-  const handleOffer = async (offer, senderId) => {
-    const peerConnection = new RTCPeerConnection({ iceServers });
-    peerConnections.current[senderId] = peerConnection;
+  // Stop broadcasting
+  const stopBroadcast = () => {
+    // Close all peer connections
+    Object.keys(peerConnections.current).forEach((peerId) => {
+      const pc = peerConnections.current[peerId];
+      pc.close();
+      delete peerConnections.current[peerId];
+    });
 
+    // Reset remote video refs
+    remoteVideoRefs.current = {};
+
+    // Send stop broadcast message
+    sendJsonMessage({ type: 'stop-broadcast' });
+    setIsBroadcasting(false);
+  };
+
+  // Create a peer connection
+  const createPeerConnection = (remoteUserId) => {
+    const peerConnection = new RTCPeerConnection({ iceServers });
+
+    // Add local stream tracks to peer connection
+    localStream.current.getTracks().forEach((track) => {
+      peerConnection.addTrack(track, localStream.current);
+    });
+
+    // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         sendJsonMessage({
           type: 'ice-candidate',
           candidate: event.candidate,
-          recipientId: senderId,
+          recipientId: remoteUserId,
         });
       }
     };
 
     peerConnection.ontrack = (event) => {
-      if (!remoteVideoRefs.current[senderId]) {
-        remoteVideoRefs.current[senderId] = React.createRef();
+      if (!remoteVideoRefs.current[remoteUserId]) {
+        remoteVideoRefs.current[remoteUserId] = React.createRef();
       }
-      if (remoteVideoRefs.current[senderId].current) {
-        remoteVideoRefs.current[senderId].current.srcObject = event.streams[0];
-      }
+    
+      const attachStream = () => {
+        const remoteVideo = remoteVideoRefs.current[remoteUserId];
+        if (remoteVideo.current) {
+          remoteVideo.current.srcObject = event.streams[0];
+          console.log(`Attached remote stream to video element for user ${remoteUserId}`);
+        } else {
+          console.error(`Remote video element for ${remoteUserId} is not ready.`);
+          // setTimeout(attachStream, 100); // Retry after a short delay
+        }
+      };
+    
+      attachStream(); // Attempt to attach the stream
     };
+    
 
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    return peerConnection;
+  };
 
-    localStream.current.getTracks().forEach((track) => {
-      peerConnection.addTrack(track, localStream.current);
-    });
+  // Create and send offer
+  const createAndSendOffer = async (remoteUserId) => {
+    const peerConnection = createPeerConnection(remoteUserId);
+    peerConnections.current[remoteUserId] = peerConnection;
 
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
+    try {
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
 
-    sendJsonMessage({
-      type: 'answer',
-      answer,
-      recipientId: senderId,
-    });
+      sendJsonMessage({
+        type: 'offer',
+        offer,
+        recipientId: remoteUserId,
+      });
+    } catch (error) {
+      console.error('Error creating offer:', error);
+    }
+  };
+
+  // Handle incoming offer
+  const handleOffer = async (offer, senderId) => {
+    const peerConnection = createPeerConnection(senderId);
+    peerConnections.current[senderId] = peerConnection;
+
+    try {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+
+      sendJsonMessage({
+        type: 'answer',
+        answer,
+        recipientId: senderId,
+      });
+    } catch (error) {
+      console.error('Error handling offer:', error);
+    }
   };
 
   // Handle incoming answer
   const handleAnswer = async (answer, senderId) => {
     const peerConnection = peerConnections.current[senderId];
     if (peerConnection) {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      } catch (error) {
+        console.error('Error handling answer:', error);
+      }
     }
   };
 
@@ -108,23 +192,44 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId }) => {
   const handleNewICECandidate = async (candidate, senderId) => {
     const peerConnection = peerConnections.current[senderId];
     if (peerConnection) {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.error('Error adding ICE candidate:', error);
+      }
     }
   };
 
-  // WebRTC signaling message handler
+  // WebRTC signaling and message handling
   useEffect(() => {
     if (lastJsonMessage) {
       const { type, senderId, ...data } = lastJsonMessage;
 
-      if (senderId === userId) {
-        console.log('Ignored message from self');
-        return;
-      }
+      // Ignore messages from self
+      if (senderId === userId) return;
 
       switch (type) {
-        case 'start-broadcast':
-          console.log(`Broadcast started by user: ${senderId}`);
+        case 'update-users':
+          console.log('Received update-users:', data.users);
+          setAvailableBroadcasters(
+            data.users
+              .filter(user => user.isBroadcasting)
+              .map(user => ({
+                id: user.id, // Use `id` provided by the server
+                username: user.username
+              }))
+          );
+          
+          console.log('Broadcasters to render:', availableBroadcasters);
+
+          break;
+        
+
+        case 'broadcast-request':
+          // Another user wants to broadcast, create a peer connection
+          if (!isBroadcasting) {
+            createAndSendOffer(senderId);
+          }
           break;
 
         case 'offer':
@@ -139,35 +244,76 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId }) => {
           handleNewICECandidate(data.candidate, senderId);
           break;
 
+        case 'broadcast-ended':
+          // Remove remote video for the user who stopped broadcasting
+          if (remoteVideoRefs.current[senderId]) {
+            delete remoteVideoRefs.current[senderId];
+          }
+          break;
+
         default:
           console.log('Ignored non-WebRTC message type:', type);
           break;
       }
     }
-  }, [lastJsonMessage, userId]);
+  }, [lastJsonMessage, userId, isBroadcasting]);
 
   return (
     <div>
       <h2>Live Video Chat</h2>
       <div>
-        <video ref={localVideoRef} autoPlay muted style={{ width: '300px', border: '1px solid black' }}></video>
+        <video 
+          ref={localVideoRef} 
+          autoPlay 
+          muted 
+          style={{ width: '300px', border: '1px solid black' }}
+        ></video>
         <div>
-          <button onClick={toggleMic}>{isMicOn ? 'Turn Mic Off' : 'Turn Mic On'}</button>
-          <button onClick={toggleCam}>{isCamOn ? 'Turn Cam Off' : 'Turn Cam On'}</button>
-          <button onClick={startBroadcast}>Start Broadcast</button>
+          <button onClick={toggleMic}>
+            {isMicOn ? 'Turn Mic Off' : 'Turn Mic On'}
+          </button>
+          <button onClick={toggleCam}>
+            {isCamOn ? 'Turn Cam Off' : 'Turn Cam On'}
+          </button>
+          {!isBroadcasting ? (
+            <button onClick={startBroadcast}>Start Broadcast</button>
+          ) : (
+            <button onClick={stopBroadcast}>Stop Broadcast</button>
+          )}
         </div>
       </div>
+
+      <div>
+        <h3>Available Broadcasters:</h3>
+        {Object.values(availableBroadcasters).length > 0 ? (
+          Object.values(availableBroadcasters).map((broadcaster, index)=> (
+            <div key={index}>
+              {broadcaster.username} is broadcasting
+            </div>
+          ))
+        ) : (
+          <p>No active broadcasters</p>
+        )}
+      </div>
+
       <div>
         <h3>Remote Streams:</h3>
-        {Object.keys(remoteVideoRefs.current).map((id) => (
-          <video
-            key={id}
-            ref={remoteVideoRefs.current[id]}
-            autoPlay
-            style={{ width: '300px', border: '1px solid black' }}
-          ></video>
-        ))}
-      </div>
+        {Object.keys(remoteVideoRefs.current).map((id) => {
+          if (!remoteVideoRefs.current[id]) {
+            remoteVideoRefs.current[id] = React.createRef();
+          }
+
+          return (
+            <video
+              key={id}
+              ref={remoteVideoRefs.current[id]}
+              autoPlay
+              playsInline
+              style={{ width: '300px', border: '1px solid black' }}
+            ></video>
+          );
+        })}
+          </div>
     </div>
   );
 };

@@ -34,6 +34,11 @@ const ChatInterface = () => {
     if (lastJsonMessage) {
       const { type, ...data } = lastJsonMessage;
 
+      if (['offer', 'answer', 'ice-candidate'].includes(type)) {
+        // Ignore WebRTC signaling messages here
+        return;
+      }
+
       switch (type) {
         case 'signed-in':
           console.log(`Signed in as ${data.username} (ID: ${data.userId})`);
@@ -69,12 +74,14 @@ const ChatInterface = () => {
 
     if (readyState !== WebSocket.OPEN) {
       console.log('WebSocket connection is not open.');
+      alert('Connection lost. Reconnecting...');
       return;
     }
 
     sendJsonMessage({
       type: 'send-message',
       text: inputMessage,
+      senderId: userId, // Explicitly pass the senderId
     });
 
     setInputMessage('');
@@ -96,7 +103,7 @@ const ChatInterface = () => {
         <ul>
           {participants.map((participant, index) => (
             <li key={index}>
-              {participant}
+              {participant.username || 'Unknown User'} 
            
               </li>
           ))}
