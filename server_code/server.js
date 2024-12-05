@@ -1,10 +1,18 @@
-const WebSocket = require('ws');
-const { v4: uuidv4 } = require('uuid');
-
+const WebSocket = require('ws'); // npm install ws
+const { v4: uuidv4 } = require('uuid'); //npm install uuid
+const express = require('express');
 //To allow the other devices to connect to the server, hook the host to real ip address of the local host
 //For example, if local IP: 192.168.0.1, change host:'192.168.0.1'
 //At the same time, change the ChatInterface websocket listening as well.  useWebSocket('ws://192.168.0.1:8080', {....})
 
+const app = express();
+// Log all incoming requests, useful for debugging endpoints
+app.use((req, res, next) => {
+  console.log(`Incoming request: ${req.method} ${req.url}`);
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body); // Only for POST/PUT/PATCH requests
+  next(); // Pass to the next middleware or route handler
+});
 // Create a WebSocket server
 const wss = new WebSocket.Server({port: 8080 });
 
