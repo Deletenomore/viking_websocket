@@ -22,8 +22,10 @@ wss.on('connection', (ws) => {
   // Error handling: WebSocket 'close' event
   ws.on('close', () => {
     console.log(`WebSocket connection closed for userId: ${userId}`);
+    
+    // Notify others that this user has disconnected
+    broadcastUserDisconnection(userId);
     delete users[userId]; // Remove user from global users dictionary
-    broadcast({ type: 'update-users', users: Object.values(users).map((user) => user.username) });
   });
 
   // Error handling: WebSocket 'error' event
@@ -38,74 +40,91 @@ wss.on('connection', (ws) => {
     try {
 
       const data = JSON.parse(message); // Parse the incoming message
+      // Associate userId with the WebSocket
+      data.senderId = userId;
 
       switch (data.type) {
         case 'sign-in': {
           const username = data.username || 'Anonymous';
 
           // Save user details in the global dictionary
-          users[userId] = { ws, username };
-          ws.userId = userId; // Associate the WebSocket with the userId
+          users[userId] = { 
+            ws, 
+            username, 
+            isBroadcasting: false 
+          };
 
           console.log(`User signed in: ${username} (${userId})`);
 
           // Send the userId and username back to the client
-          ws.send(JSON.stringify({ type: 'signed-in', userId, username }));
+          ws.send(JSON.stringify({ 
+            type: 'signed-in', 
+            userId, 
+            username 
+          }));
 
           // Notify all other users about the new participant
-          broadcast({ type: 'update-users', users: Object.values(users).map((user) => user.username) });
+          broadcastUserList();
           break;
         }
 
         case 'send-message': {
-          const senderId = ws.userId;
+          const senderId = data.senderId; // Correct senderId usage
           const sender = users[senderId]?.username || 'Unknown';
-
+        
           if (!senderId || !data.text) {
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid message parameters' }));
             return;
           }
-
+        
           console.log(`Broadcasting message from ${sender} (${senderId}): ${data.text}`);
-
+        
           // Broadcast the message to all connected users
           broadcast({ type: 'send-message', text: data.text, sender });
           break;
         }
-
+        
         case 'start-broadcast': {
+          // Mark this user as a broadcaster
+          if (users[userId]) {
+            users[userId].isBroadcasting = true;
+          }
+
           console.log(`User ${userId} started broadcasting`);
           
-          // Notify all other users with additional metadata
+          // Notify all other users that this user wants to start a broadcast
           broadcastToOthers({ 
-            type: 'start-broadcast', 
-            senderId: userId, 
-            message: 'Broadcast is starting. Prepare for WebRTC offers.' 
+            type: 'broadcast-request', 
+            senderId: userId,
+            senderUsername: users[userId]?.username || 'Anonymous'
           }, userId);
           
           break;
         }
-        
 
-        // Handle WebRTC signaling
-        case 'offer': {
-          console.log(`Broadcasting offer from ${userId} to ${data.recipientId}`);
-          sendToUser(data.recipientId, { type: 'offer', offer: data.offer, senderId: userId });
-          break;
-        }
-        
-        case 'answer': {
-          console.log(`Broadcasting answer from ${userId} to ${data.recipientId}`);
-          sendToUser(data.recipientId, { type: 'answer', answer: data.answer, senderId: userId });
-          break;
-        }
-        
-        case 'ice-candidate': {
-          console.log(`Broadcasting ICE candidate from ${userId} to ${data.recipientId}`);
-          sendToUser(data.recipientId, { type: 'ice-candidate', candidate: data.candidate, senderId: userId });
-          break;
-        }
-        
+
+         // WebRTC Signaling Messages
+          case 'offer':
+          case 'answer':
+          case 'ice-candidate': {
+            // Forward signaling messages to the specific recipient
+            forwardSignalingMessage(data);
+            break;
+          }
+  
+          case 'stop-broadcast': {
+            // Mark this user as no longer broadcasting
+            if (users[userId]) {
+              users[userId].isBroadcasting = false;
+            }
+  
+            // Notify others that broadcast has stopped
+            broadcastToOthers({
+              type: 'broadcast-ended',
+              senderId: userId
+            }, userId);
+            break;
+          }
         
         
         
@@ -134,28 +153,54 @@ wss.on('connection', (ws) => {
     });
   }
 
-    // Helper function to broadcast messages to all users except the sender
-    function broadcastToOthers(data, excludeUserId) {
-      Object.keys(users).forEach((userId) => {
-        if (userId !== excludeUserId && users[userId].ws.readyState === WebSocket.OPEN) {
-          try {
-            console.log(`Sending message to user: ${userId}`);
-            users[userId].ws.send(JSON.stringify(data));
-          } catch (sendError) {
-            console.error(`Failed to send message to user ${userId}`, sendError);
-          }
-        }
+    // Helper function to broadcast the current user list
+    function broadcastUserList() {
+      broadcast({ 
+        type: 'update-users', 
+        users: Object.entries(users).map(([id, user]) => ({
+          id, // Add the userId as id
+          username: user.username,
+          isBroadcasting: user.isBroadcasting
+        }))
       });
     }
-    
-  
-    // Helper function to send a message to a specific user
-    function sendToUser(recipientId, data) {
-      const recipient = users[recipientId];
-      if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
-        recipient.ws.send(JSON.stringify(data));
+
+   // Helper function to broadcast messages to all users except the sender
+   function broadcastToOthers(data, excludeUserId) {
+    Object.keys(users).forEach((userId) => {
+      if (userId !== excludeUserId && users[userId].ws.readyState === WebSocket.OPEN) {
+        try {
+          users[userId].ws.send(JSON.stringify(data));
+        } catch (sendError) {
+          console.error(`Failed to send message to user ${userId}`, sendError);
+        }
       }
+    });
+  }
+
+  // Helper function to forward WebRTC signaling messages
+  function forwardSignalingMessage(data) {
+    const recipientId = data.recipientId;
+    const recipient = users[recipientId];
+
+    if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+      try {
+        recipient.ws.send(JSON.stringify(data));
+      } catch (sendError) {
+        console.error(`Error forwarding ${data.type} to recipient`, sendError);
+      }
+    } else {
+      console.log(`Recipient ${recipientId} not found or not connected`);
     }
+  }
+
+  // Helper function to broadcast user disconnection
+  function broadcastUserDisconnection(disconnectedUserId) {
+    broadcastToOthers({
+      type: 'user-disconnected',
+      senderId: disconnectedUserId
+    }, disconnectedUserId);
+  }
   
 });
 
