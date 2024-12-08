@@ -1,56 +1,124 @@
 import React, { useRef, useState, useEffect } from 'react';
+import adapter from 'webrtc-adapter';
 
-const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId, username }) => {
+const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId, username, callRequest}) => {
   const localVideoRef = useRef(null);
   const remoteVideoRefs = useRef({});
   const localStream = useRef(null);
   const peerConnections = useRef({});
-  const iceServers = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { 
-      urls: 'turn:turn.example.com', 
-      credential: 'webrtc',
-      username: 'webrtc'
-    }
-  ];
-  
+  const [remoteUserId, setRemoteUserId] = useState(null);
   const [isMicOn, setIsMicOn] = useState(false);
   const [isCamOn, setIsCamOn] = useState(false);
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [availableBroadcasters, setAvailableBroadcasters] = useState([]);
+  const [inCall, setInCall] = useState(false); // State to track if a call is active
 
-  // Initialize media stream
+
+  const iceServers = [
+    // Public STUN servers
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+  ];
+  
+
+
+  const hangUp = () => {
+    // Notify the other user to hang up
+    sendJsonMessage({
+      type: 'hang-up',
+      senderId: userId,
+      recipientId: remoteUserId, // Include the recipient ID
+    });
+    console.log(`Hang-up message sent from ${userId} to ${remoteUserId}`);
+    handleHangUp(); // Perform local cleanup
+  };
+
+  const handleHangUp = () => {
+    console.log('Received hang-up signal from remote user');
+    cleanupPeerConnection();
+  };
+
+  // Clean up peer connection resources
+  const cleanupPeerConnection = (peerId) => {
+   // Stop local tracks
+   if (localStream.current) {
+    localStream.current.getTracks().forEach((track) => track.stop());
+  }
+
+  // Close all peer connections
+  Object.keys(peerConnections.current).forEach((peerId) => {
+    const pc = peerConnections.current[peerId];
+    if (pc) pc.close();
+    delete peerConnections.current[peerId];
+  });
+
+  // Clear remote video refs
+  remoteVideoRefs.current = {};
+
+  // Reset call state
+  setInCall(false);
+  console.log('Call ended. Resources cleaned up.');
+  };
+
+  
+
   useEffect(() => {
     const initMediaStream = async () => {
       try {
-        localStream.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        // Enumerate available media devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+  
+        // Find a video input device (camera) and audio input device (microphone)
+        const videoDevice = devices.find((device) => device.kind === "videoinput");
+        const audioDevice = devices.find((device) => device.kind === "audioinput");
+  
+        // Set up constraints based on available devices
+        const constraints = {
+          video: videoDevice ? { width: 1280, height: 720 } : false,
+          audio: !!audioDevice,
+        };
+  
+        console.log("getUserMedia start with constraints:", constraints);
+  
+        // Request media stream with the constraints
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+  
+        // Assign the stream to the local video element and the localStream reference
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = localStream.current;
+          localVideoRef.current.srcObject = stream;
         }
-        localStream.current.getAudioTracks().forEach((track) => (track.enabled = false));
-        localStream.current.getVideoTracks().forEach((track) => (track.enabled = false));
+        localStream.current = stream;
+  
+        // Optionally, disable tracks initially (e.g., for muting)
+        toggleTracks(false);
+  
+        console.log("Media stream initialized successfully.");
       } catch (error) {
-        console.error('Error accessing media devices:', error);
+        console.error("Error accessing media devices:", error);
+  
+        const errorMessages = {
+          NotAllowedError: "Camera and microphone access was denied. Please allow access in browser settings.",
+          NotFoundError: "No camera or microphone found. Please connect devices.",
+          OverconstrainedError: "The requested constraints cannot be satisfied.",
+          default: "An unexpected error occurred while accessing media devices.",
+        };
+  
+        alert(errorMessages[error.name] || errorMessages.default);
       }
     };
   
     initMediaStream();
   
     return () => {
-      // Copy `peerConnections.current` to a variable before using in cleanup
-      const connections = peerConnections.current;
-  
-      if (localStream.current) {
-        localStream.current.getTracks().forEach((track) => track.stop());
-      }
-  
-      Object.values(connections).forEach((pc) => {
-        pc.close();
-      });
+      handleHangUp(); // Clean up resources when the component unmounts
     };
   }, []);
+  
 
-  // Toggle microphone
+  const toggleTracks = (isEnabled) => {
+    localStream.current?.getAudioTracks().forEach((track) => (track.enabled = isEnabled));
+    localStream.current?.getVideoTracks().forEach((track) => (track.enabled = isEnabled));
+    setIsMicOn(isEnabled);
+    setIsCamOn(isEnabled);
+  };
+
   const toggleMic = () => {
     const audioTrack = localStream.current?.getAudioTracks()[0];
     if (audioTrack) {
@@ -59,7 +127,6 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId, username }) => {
     }
   };
 
-  // Toggle camera
   const toggleCam = () => {
     const videoTrack = localStream.current?.getVideoTracks()[0];
     if (videoTrack) {
@@ -68,41 +135,83 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId, username }) => {
     }
   };
 
-  // Start broadcasting
-  const startBroadcast = async () => {
-    if (!localStream.current) return;
 
-    sendJsonMessage({ type: 'start-broadcast' });
-    setIsBroadcasting(true);
-  };
 
-  // Stop broadcasting
-  const stopBroadcast = () => {
-    // Close all peer connections
-    Object.keys(peerConnections.current).forEach((peerId) => {
-      const pc = peerConnections.current[peerId];
-      pc.close();
-      delete peerConnections.current[peerId];
-    });
-
-    // Reset remote video refs
-    remoteVideoRefs.current = {};
-
-    // Send stop broadcast message
-    sendJsonMessage({ type: 'stop-broadcast' });
-    setIsBroadcasting(false);
-  };
-
-  // Create a peer connection
+  //Fuction to create Peer Connection
   const createPeerConnection = (remoteUserId) => {
     const peerConnection = new RTCPeerConnection({ iceServers });
 
-    // Add local stream tracks to peer connection
-    localStream.current.getTracks().forEach((track) => {
-      peerConnection.addTrack(track, localStream.current);
-    });
+      // Comprehensive connection state management
+  const handleConnectionStateChange = () => {
+    switch (peerConnection.connectionState) {
+      case 'connected':
+        setInCall(true);
+        console.log(`Peer connection established with ${username}`);
+        break;
+      
+      // case 'disconnected':
+      //   console.warn(`Connection with ${remoteUserId} lost`);
+      //   handlePeerDisconnection(remoteUserId);
+      //   break;
+      
+      case 'failed':
+        console.error(`Connection with ${remoteUserId} failed`);
+        handleConnectionFailure(remoteUserId);
+        break;
+      
+      case 'closed':
+        console.log(`Connection with ${remoteUserId} closed`);
+        cleanupPeerConnection(remoteUserId);
+        break;
+    }
+  };
 
-    // Handle ICE candidates
+  // Ice connection state detailed monitoring
+  const handleIceConnectionStateChange = () => {
+    switch (peerConnection.iceConnectionState) {
+      case 'checking':
+        console.log(`Establishing connection with ${remoteUserId}`);
+        break;
+      
+      case 'connected':
+        console.log(`ICE connection established with ${remoteUserId}`);
+        break;
+      
+      // case 'disconnected':
+      //   console.warn(`ICE connection lost with ${remoteUserId}`);
+      //   handlePeerDisconnection(remoteUserId);
+      //   break;
+      
+      case 'failed':
+        console.error(`ICE connection failed with ${remoteUserId}`);
+        handleConnectionFailure(remoteUserId);
+        break;
+    }
+  };
+
+
+  // Handle connection failure
+  const handleConnectionFailure = (peerId) => {
+    console.error(`Permanent connection failure with ${peerId}`);
+    
+    // Clean up resources
+    cleanupPeerConnection(peerId);
+    
+    // Provide user-friendly error notification
+    alert(`Unable to establish stable connection. Please check your network and try again.`);
+  };
+
+  // Add event listeners for connection state monitoring
+  peerConnection.onconnectionstatechange = handleConnectionStateChange;
+  peerConnection.oniceconnectionstatechange = handleIceConnectionStateChange;
+
+
+
+//old
+    localStream.current.getTracks().forEach((track) =>
+      peerConnection.addTrack(track, localStream.current)
+    );
+
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         sendJsonMessage({
@@ -114,206 +223,160 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId, username }) => {
     };
 
     peerConnection.ontrack = (event) => {
-      if (!remoteVideoRefs.current[remoteUserId]) {
-        remoteVideoRefs.current[remoteUserId] = React.createRef();
-      }
+      console.log(`Track received from ${remoteUserId}:`, event.streams);
     
-      const attachStream = () => {
+      // Create a MediaStream buffer
+      const buffer = new MediaStream();
+      event.streams[0].getTracks().forEach((track) => {
+        buffer.addTrack(track);
+      });
+    
+      // Simulate buffering delay (adjust timeout as necessary for latency)
+      setTimeout(() => {
+        if (!remoteVideoRefs.current[remoteUserId]) {
+          remoteVideoRefs.current[remoteUserId] = React.createRef();
+        }
+    
         const remoteVideo = remoteVideoRefs.current[remoteUserId];
         if (remoteVideo.current) {
-          remoteVideo.current.srcObject = event.streams[0];
-          console.log(`Attached remote stream to video element for user ${remoteUserId}`);
-        } else {
-          console.error(`Remote video element for ${remoteUserId} is not ready.`);
-          // setTimeout(attachStream, 100); // Retry after a short delay
+          remoteVideo.current.srcObject = buffer;
+          console.log(`Buffered stream set for ${remoteUserId}`);
         }
-      };
-    
-      attachStream(); // Attempt to attach the stream
+      }, 500); // Adjust delay to match latency conditions
     };
-    
 
     return peerConnection;
   };
 
-  // Create and send offer
-  const createAndSendOffer = async (remoteUserId) => {
+    const createAndSendOffer = async (remoteUserId) => {
+    setRemoteUserId(remoteUserId); // Store the remote user ID
     const peerConnection = createPeerConnection(remoteUserId);
     peerConnections.current[remoteUserId] = peerConnection;
 
     try {
       const offer = await peerConnection.createOffer();
       await peerConnection.setLocalDescription(offer);
-
       sendJsonMessage({
         type: 'offer',
         offer,
         recipientId: remoteUserId,
       });
+       setInCall(true); // Set inCall to true when the call starts
+      console.log('In Call State:', inCall);
     } catch (error) {
-      console.error('Error creating offer:', error);
+      console.error('Error creating offer:', error); // Highlighted: Enhanced error handling
     }
   };
 
-  // Handle incoming offer
   const handleOffer = async (offer, senderId) => {
-    const peerConnection = createPeerConnection(senderId);
-    peerConnections.current[senderId] = peerConnection;
-
+    setRemoteUserId(senderId); // Store the sender as the remote user
+    let peerConnection = peerConnections.current[senderId];
+    if (!peerConnection) {
+      peerConnection = createPeerConnection(senderId);
+      peerConnections.current[senderId] = peerConnection;
+    }
     try {
       await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-      
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
-
       sendJsonMessage({
         type: 'answer',
         answer,
         recipientId: senderId,
       });
     } catch (error) {
-      console.error('Error handling offer:', error);
+      console.error(`Error handling offer for ${senderId}:`, error); // Highlighted: Error handling for offers
     }
   };
 
-  // Handle incoming answer
   const handleAnswer = async (answer, senderId) => {
     const peerConnection = peerConnections.current[senderId];
-    if (peerConnection) {
-      try {
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-      } catch (error) {
-        console.error('Error handling answer:', error);
-      }
+    if (!peerConnection) {
+      console.error(`No peer connection found for senderId: ${senderId}`); // Highlighted: Handle missing peerConnection
+      return;
+    }
+    try {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log(`Set remote description for ${senderId}`);
+    } catch (error) {
+      console.error(`Error handling answer for ${senderId}:`, error); // Highlighted: Error handling for answers
     }
   };
 
-  // Handle incoming ICE candidate
   const handleNewICECandidate = async (candidate, senderId) => {
     const peerConnection = peerConnections.current[senderId];
     if (peerConnection) {
       try {
         await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log(`Added ICE candidate for ${senderId}`);
       } catch (error) {
-        console.error('Error adding ICE candidate:', error);
+        console.error(`Error adding ICE candidate for ${senderId}:`, error); // Highlighted: Error handling for ICE candidates
       }
     }
   };
 
-  // WebRTC signaling and message handling
   useEffect(() => {
     if (lastJsonMessage) {
       const { type, senderId, ...data } = lastJsonMessage;
 
-      // Ignore messages from self
-      if (senderId === userId) return;
+            // Handle only WebRTC-related messages
+      const allowedTypes = ['initiate-call', 'offer', 'answer', 'ice-candidate'];
+      if (!allowedTypes.includes(type)) return;
 
+  
       switch (type) {
-        case 'update-users':
-          console.log('Received update-users:', data.users);
-          setAvailableBroadcasters(
-            data.users
-              .filter(user => user.isBroadcasting)
-              .map(user => ({
-                id: user.id, // Use `id` provided by the server
-                username: user.username
-              }))
-          );
-          
-          console.log('Broadcasters to render:', availableBroadcasters);
-
+        case 'initiate-call':
+          createAndSendOffer(senderId); // Initiates an offer for the caller
           break;
-        
-
-        case 'broadcast-request':
-          // Another user wants to broadcast, create a peer connection
-          if (!isBroadcasting) {
-            createAndSendOffer(senderId);
-          }
-          break;
-
+  
         case 'offer':
-          handleOffer(data.offer, senderId);
+          handleOffer(data.offer, senderId); // Handles the incoming offer
           break;
-
+  
         case 'answer':
-          handleAnswer(data.answer, senderId);
+          handleAnswer(data.answer, senderId); // Handles the incoming answer
           break;
-
+  
         case 'ice-candidate':
-          handleNewICECandidate(data.candidate, senderId);
+          handleNewICECandidate(data.candidate, senderId); // Adds ICE candidate
           break;
 
-        case 'broadcast-ended':
-          // Remove remote video for the user who stopped broadcasting
-          if (remoteVideoRefs.current[senderId]) {
-            delete remoteVideoRefs.current[senderId];
-          }
-          break;
-
+        case 'hang-up':
+          handleHangUp();
+        break;
+  
         default:
-          console.log('Ignored non-WebRTC message type:', type);
-          break;
+          console.warn('Unhandled WebRTC message type:', { type, data, senderId }); // Highlighted: Enhanced logging
       }
     }
-  }, [lastJsonMessage, userId, isBroadcasting]);
+  }, [lastJsonMessage]);
+  
+  
 
   return (
     <div>
       <h2>Live Video Chat</h2>
+      <video ref={localVideoRef} autoPlay muted style={{ width: '300px', border: '1px solid black' }}></video>
       <div>
-        <video 
-          ref={localVideoRef} 
-          autoPlay 
-          muted 
-          style={{ width: '300px', border: '1px solid black' }}
-        ></video>
-        <div>
-          <button onClick={toggleMic}>
-            {isMicOn ? 'Turn Mic Off' : 'Turn Mic On'}
+        <button onClick={toggleMic}>{isMicOn ? 'Turn Mic Off' : 'Turn Mic On'}</button>
+        <button onClick={toggleCam}>{isCamOn ? 'Turn Cam Off' : 'Turn Cam On'}</button>
+        {inCall && (
+          <button onClick={hangUp} style={{ color: 'red', fontWeight: 'bold' }}>
+            Hang Up
           </button>
-          <button onClick={toggleCam}>
-            {isCamOn ? 'Turn Cam Off' : 'Turn Cam On'}
-          </button>
-          {!isBroadcasting ? (
-            <button onClick={startBroadcast}>Start Broadcast</button>
-          ) : (
-            <button onClick={stopBroadcast}>Stop Broadcast</button>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <h3>Available Broadcasters:</h3>
-        {Object.values(availableBroadcasters).length > 0 ? (
-          Object.values(availableBroadcasters).map((broadcaster, index)=> (
-            <div key={index}>
-              {broadcaster.username} is broadcasting
-            </div>
-          ))
-        ) : (
-          <p>No active broadcasters</p>
         )}
       </div>
 
-      <div>
-        <h3>Remote Streams:</h3>
-        {Object.keys(remoteVideoRefs.current).map((id) => {
-          if (!remoteVideoRefs.current[id]) {
-            remoteVideoRefs.current[id] = React.createRef();
-          }
-
-          return (
-            <video
-              key={id}
-              ref={remoteVideoRefs.current[id]}
-              autoPlay
-              playsInline
-              style={{ width: '300px', border: '1px solid black' }}
-            ></video>
-          );
-        })}
-          </div>
+      <h3>Remote Streams:</h3>
+      {Object.keys(remoteVideoRefs.current).map((id) => (
+        <video
+          key={id}
+          ref={remoteVideoRefs.current[id]}
+          autoPlay
+          playsInline
+          style={{ width: '300px', border: '1px solid black' }}
+        ></video>
+            ))}
     </div>
   );
 };

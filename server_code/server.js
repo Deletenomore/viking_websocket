@@ -1,209 +1,208 @@
+var http = require('http');
+var https = require('https');
+var fs = require('fs');
 const WebSocket = require('ws');
+const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 
-//To allow the other devices to connect to the server, hook the host to real ip address of the local host
-//For example, if local IP: 192.168.0.1, change host:'192.168.0.1'
-//At the same time, change the ChatInterface websocket listening as well.  useWebSocket('ws://192.168.0.1:8080', {....})
 
-// Create a WebSocket server
-const wss = new WebSocket.Server({port: 8080 });
+const app = express();
+
+
+// HTTPS connections.
+// Load the self-signed certificate and private key
+const httpsOptions = {
+  key: fs.readFileSync('localhost.key'),
+  cert: fs.readFileSync('localhost.crt'),
+  
+};
+
+
+// Example route
+app.get('/', (req, res) => {
+  res.send('Hello, HTTPS World!');
+});
+
+
+try {
+  httpsOptions.key = fs.readFileSync(keyFilePath);
+  console.log( httpsOptions.key);
+  try {
+    httpsOptions.cert = fs.readFileSync(certFilePath);
+  } catch(err) {
+    httpsOptions.key = null;
+    httpsOptions.cert = null;
+  }
+} catch(err) {
+  httpsOptions.key = null;
+  httpsOptions.cert = null;
+}
+
+// If we were able to get the key and certificate files, try to
+// start up an HTTPS server.
+
+var webServer = null;
+
+try {
+  if (httpsOptions.key && httpsOptions.cert) {
+    webServer = https.createServer(httpsOptions, handleWebRequest);
+  }
+} catch(err) {
+  webServer = null;
+}
+
+if (!webServer) {
+  try {
+    webServer = http.createServer({}, handleWebRequest);
+  } catch(err) {
+    webServer = null;
+    log(`Error attempting to create HTTP(s) server: ${err.toString()}`);
+  }
+}
+
+
+// Our HTTPS server does nothing but service WebSocket
+// connections, so every request just returns 404. Real Web
+// requests are handled by the main server on the box. If you
+// want to, you can return real HTML here and serve Web content.
+
+function handleWebRequest(request, response) {
+  log ("Received request for " + request.url);
+  response.writeHead(404);
+  response.end();
+}
+
+// Spin up the HTTPS server on the port assigned to this sample.
+// This will be turned into a WebSocket port very shortly.
+
+
+// Start the server
+const PORT = 8080;
+webServer.listen(PORT, () => {
+  console.log(`Server is listening on port ${PORT}`);
+});
+
+// Create WebSocket server
+const wss = new WebSocket.Server({ server: webServer });
 
 // Global dictionary to track all users
 const users = {}; // Maps userId to WebSocket and username
 
-// WebSocket server connection
 wss.on('connection', (ws) => {
   const userId = uuidv4(); // Generate a unique userId for the user
-  let voiceChatOn = false; // Default voice chat status is off
-
-  // Log when the connection opens
   console.log(`WebSocket connection opened for userId: ${userId}`);
 
-  // Error handling: WebSocket 'close' event
   ws.on('close', () => {
     console.log(`WebSocket connection closed for userId: ${userId}`);
-    
-    // Notify others that this user has disconnected
-    broadcastUserDisconnection(userId);
-    delete users[userId]; // Remove user from global users dictionary
+    delete users[userId];
+    broadcastUserList();
   });
 
-  // Error handling: WebSocket 'error' event
-  ws.on('error', (error) => {
-    console.error(`WebSocket error for userId: ${userId}`, error);
-    // Close the connection if there's an error
-    ws.close();
-  });
-
-  // Handle incoming messages from the client
   ws.on('message', (message) => {
     try {
-
-      const data = JSON.parse(message); // Parse the incoming message
-      // Associate userId with the WebSocket
+      const data = JSON.parse(message);
       data.senderId = userId;
 
       switch (data.type) {
         case 'sign-in': {
-          const username = data.username || 'Anonymous';
+          let username = data.username || 'Anonymous';
+          let userRole = data.role;
+          // Check if an instructor is already logged in
+          const instructorExists = Object.values(users).some(
+            (user) => user.role === 'instructor'
+          );
 
-          // Save user details in the global dictionary
-          users[userId] = { 
-            ws, 
-            username, 
-            isBroadcasting: false 
-          };
+          if (userRole === 'instructor' && instructorExists) {
+            ws.send(
+              JSON.stringify({
+                type: 'error',
+                message: 'An instructor is already logged in.',
+              })
+            );
+            return;
+          }
 
-          console.log(`User signed in: ${username} (${userId})`);
-
-          // Send the userId and username back to the client
-          ws.send(JSON.stringify({ 
-            type: 'signed-in', 
-            userId, 
-            username 
-          }));
-
-          // Notify all other users about the new participant
+          username = ensureUniqueUsername(username); // Ensure the username is unique
+          users[userId] = { ws, username,role: userRole };
+          console.log(`User signed in: ${userRole} ${username} (${userId})`);
+          ws.send(JSON.stringify({ type: 'sign-in', userId, username, role:userRole }));
           broadcastUserList();
           break;
         }
 
         case 'send-message': {
-          const senderId = data.senderId; // Correct senderId usage
-          const sender = users[senderId]?.username || 'Unknown';
-        
-          if (!senderId || !data.text) {
+          const sender = users[userId]?.username || 'Unknown';
+          if (!data.text) {
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid message parameters' }));
             return;
           }
-        
-          console.log(`Broadcasting message from ${sender} (${senderId}): ${data.text}`);
-        
-          // Broadcast the message to all connected users
-          broadcast({ type: 'send-message', text: data.text, sender });
-          break;
-        }
-        
-        case 'start-broadcast': {
-          // Mark this user as a broadcaster
-          if (users[userId]) {
-            users[userId].isBroadcasting = true;
-          }
-
-          console.log(`User ${userId} started broadcasting`);
-          
-          // Notify all other users that this user wants to start a broadcast
-          broadcastToOthers({ 
-            type: 'broadcast-request', 
-            senderId: userId,
-            senderUsername: users[userId]?.username || 'Anonymous'
-          }, userId);
-          
+          const timestamp = new Date().toISOString(); // Generate timestamp
+          console.log(`Broadcasting message from ${sender} at ${timestamp}: ${data.text}`);
+          broadcast({ type: 'send-message', sender, text: data.text, timestamp });
           break;
         }
 
+        case 'hang-up': {
+          const recipientId = data.recipientId; // Ensure recipientId is included
+          console.log(`User ${userId} initiated hang-up with recipient ${recipientId}`);
 
-         // WebRTC Signaling Messages
-          case 'offer':
-          case 'answer':
-          case 'ice-candidate': {
-            // Forward signaling messages to the specific recipient
-            forwardSignalingMessage(data);
-            break;
-          }
-  
-          case 'stop-broadcast': {
-            // Mark this user as no longer broadcasting
-            if (users[userId]) {
-              users[userId].isBroadcasting = false;
+          if (recipientId) {
+            const recipient = users[recipientId];
+            if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+              recipient.ws.send(JSON.stringify({ type: 'hang-up', senderId: userId }));
+            } else {
+              console.log(`Recipient ${recipientId} not found or not connected`);
             }
-  
-            // Notify others that broadcast has stopped
-            broadcastToOthers({
-              type: 'broadcast-ended',
-              senderId: userId
-            }, userId);
-            break;
           }
-        
-        
-        
-        default:
-          console.log('Unhandled WebSocket message:', data);
           break;
+        }
+
+        
+
+        default: {
+          // Handle signaling messages (e.g., offer, answer, ice-candidate)
+          const recipientId = data.recipientId;
+          const recipient = users[recipientId];
+          if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
+            recipient.ws.send(JSON.stringify(data));
+          } else {
+            console.log(`Recipient ${recipientId} not found or not connected`);
+          }
+          break;
+        }
       }
-
-
     } catch (error) {
       console.error('Error handling message:', error);
       ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
     }
   });
 
-  // Helper function to broadcast messages to all connected users
+  function ensureUniqueUsername(username) {
+    let uniqueUsername = username;
+    let counter = 1;
+    const usernames = Object.values(users).map((user) => user.username);
+    while (usernames.includes(uniqueUsername)) {
+      uniqueUsername = `${username}${counter}`;
+      counter++;
+    }
+    return uniqueUsername;
+  }
+
+  function broadcastUserList() {
+    const userListMsg = {
+      type: 'update-users',
+      users: Object.entries(users).map(([id, user]) => ({ id, username: user.username,role: user.role})),
+    };
+    broadcast(userListMsg);
+  }
+
   function broadcast(data) {
     Object.values(users).forEach((user) => {
       if (user.ws.readyState === WebSocket.OPEN) {
-        try {
-          user.ws.send(JSON.stringify(data)); 
-        } catch (sendError) {
-          console.error(`Error sending message to user ${user.userId}`, sendError);
-        }
+        user.ws.send(JSON.stringify(data));
       }
     });
   }
-
-    // Helper function to broadcast the current user list
-    function broadcastUserList() {
-      broadcast({ 
-        type: 'update-users', 
-        users: Object.entries(users).map(([id, user]) => ({
-          id, // Add the userId as id
-          username: user.username,
-          isBroadcasting: user.isBroadcasting
-        }))
-      });
-    }
-
-   // Helper function to broadcast messages to all users except the sender
-   function broadcastToOthers(data, excludeUserId) {
-    Object.keys(users).forEach((userId) => {
-      if (userId !== excludeUserId && users[userId].ws.readyState === WebSocket.OPEN) {
-        try {
-          users[userId].ws.send(JSON.stringify(data));
-        } catch (sendError) {
-          console.error(`Failed to send message to user ${userId}`, sendError);
-        }
-      }
-    });
-  }
-
-  // Helper function to forward WebRTC signaling messages
-  function forwardSignalingMessage(data) {
-    const recipientId = data.recipientId;
-    const recipient = users[recipientId];
-
-    if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
-      try {
-        recipient.ws.send(JSON.stringify(data));
-      } catch (sendError) {
-        console.error(`Error forwarding ${data.type} to recipient`, sendError);
-      }
-    } else {
-      console.log(`Recipient ${recipientId} not found or not connected`);
-    }
-  }
-
-  // Helper function to broadcast user disconnection
-  function broadcastUserDisconnection(disconnectedUserId) {
-    broadcastToOthers({
-      type: 'user-disconnected',
-      senderId: disconnectedUserId
-    }, disconnectedUserId);
-  }
-  
 });
-
-
 
 console.log('WebSocket server is running on ws://localhost:8080');

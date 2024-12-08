@@ -2,24 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import useWebSocket from 'react-use-websocket';
 import VideoChat from '../chat/VideoChat';
+import { useNavigate } from 'react-router-dom';
+
 
 const ChatInterface = () => {
   const location = useLocation();
-  const { username } = location.state || {}; // Get the username from CreateRoom.js
-
+  const { username, role } = location.state || {}; // Get the username from CreateRoom.js
+  const [userRole, setuserRole] = useState('');
   const [userId, setUserId] = useState('');
   const [messages, setMessages] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [webSocketError, setWebSocketError] = useState(null); // To handle connection errors
+  const [callRequest, setCallRequest] = useState(null); // To handle incoming calls
+  const navigate = useNavigate();
 
+  const localhost =  'localhost';
 
-  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(`ws://localhost:8080`, {
+  const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(`ws://${localhost}:8080`, {
     onOpen: () => {
       console.log('WebSocket connected');
       sendJsonMessage({
         type: 'sign-in',
         username,
+        role
       });
     },
     onError: (error) => {
@@ -35,23 +41,32 @@ const ChatInterface = () => {
       const { type, ...data } = lastJsonMessage;
 
       if (['offer', 'answer', 'ice-candidate'].includes(type)) {
+        console.log("Ignore RTC", type);
         // Ignore WebRTC signaling messages here
         return;
       }
 
       switch (type) {
-        case 'signed-in':
+        case 'sign-in':
           console.log(`Signed in as ${data.username} (ID: ${data.userId})`);
           setUserId(data.userId);
+          setuserRole(data.userRole);
           break;
 
         case 'update-users':
+          console.log(participants);
           setParticipants(data.users);
+
           break;
 
         case 'send-message':
-          setMessages((prevMessages) => [...prevMessages, { sender: data.sender, text: data.text }]);
+          setMessages((prevMessages) => [...prevMessages, { sender: data.sender, text: data.text, timestamp: data.timestamp }]);
           break;
+          
+          case "initiate-call":
+            console.log(`Incoming call from ${data.senderId}`);
+            setCallRequest(data.senderId); // Store the caller's ID
+            break;
 
           case 'error':
             alert(data.message);
@@ -88,8 +103,38 @@ const ChatInterface = () => {
   };
 
   
+  const initiateCall = (remoteUserId) => {
+    if (!remoteUserId || remoteUserId === userId) {
+      alert('Cannot call yourself.');
+      return;
+    }
+    sendJsonMessage({
+      type: 'initiate-call',
+      recipientId: remoteUserId,
+    });
+  };
 
+  const createBreakout = (student) => {
+    if (role !== 'instructor') {
+      alert('Only instructors can create breakout rooms.');
+      return;
+    }
   
+     // Navigate to BreakoutRoom with the selected student
+  navigate('/breakout', {
+    state: { instructor: { id: userId, username }, student },
+  });
+};
+  
+function capitalizeFirstLetter(string) {
+  if (!string) return 'Unknown Role'; // Handle undefined or null roles
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+function formatUsername(username) {
+  if (!username) return 'Unknown User'; // Handle undefined or null usernames
+  return username.replace(/([a-z])([A-Z])/g, '$1 $2'); // Add spaces between camelCase words
+}
 
   return (
     <div style={{ padding: '20px' }}>
@@ -101,11 +146,16 @@ const ChatInterface = () => {
       <div>
         <h2>Participants:</h2>
         <ul>
-          {participants.map((participant, index) => (
-            <li key={index}>
-              {participant.username || 'Unknown User'} 
-           
-              </li>
+          {participants.map((participant) => (
+            <li key={participant.id}>
+              <strong>{capitalizeFirstLetter(participant.role)}</strong>: {formatUsername(participant.username || 'Unknown User')}
+              {role === 'instructor' && participant.id !== userId && (
+              <button onClick={() => createBreakout(participant)}>Create Breakout Room</button>
+            )}
+              {participant.id !== userId && (
+                <button onClick={() => initiateCall(participant.id)}>Call</button>
+              )}
+            </li>
           ))}
         </ul>
       </div>
@@ -114,10 +164,11 @@ const ChatInterface = () => {
         <h2>Messages:</h2>
         {messages.map((message, index) => (
           <p key={index}>
-            <strong>{message.sender}:</strong> {message.text}
+            <strong>{message.sender}</strong> ({new Date(message.timestamp).toLocaleTimeString()}): {message.text}
           </p>
         ))}
       </div>
+
 
       <div>
         <input
@@ -133,7 +184,14 @@ const ChatInterface = () => {
       <div>
       {/* Other chat interface components */}
       {userId && (
-        <VideoChat sendJsonMessage={sendJsonMessage} lastJsonMessage={lastJsonMessage} userId={userId} />
+        <VideoChat 
+        sendJsonMessage={sendJsonMessage}
+         lastJsonMessage={lastJsonMessage} 
+         userId={userId} 
+         username={username}
+         callRequest={callRequest} // Pass the call request to VideoChat
+         u
+         />
       )}
       </div>
 
