@@ -19,6 +19,7 @@ const users = {}; // Maps userId to WebSocket and username
 const breakoutRoom = {};
 const rooms = {}; // Track rooms and participants
 
+
 // Create the HTTP server
 const webServer = http.createServer(app);
 // Start the server
@@ -99,26 +100,43 @@ wss.on('connection', (ws) => {
 
         //Breakout room request
         case 'create-breakout-room': {
-          const { roomId, instructor,student } = data;
-          breakoutRoom[roomId] = {instructor, student };
-          console.log('breakroom arr',breakoutRoom);
+          console.log('raw', data);
+          const { roomId, instructor, student } = data;
+        
+          if (!roomId || !instructor || !student) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid breakout room data' }));
+            return;
+          }
+        
+          // Create the breakout room
+          breakoutRoom[roomId] = { instructor, student };
+          console.log(`Breakout room ${roomId} created for instructor ${instructor} and student ${student}`);
+        
+          // Construct the breakout URL
+          const breakoutUrl = `ws://localhost:8080/breakout/${roomId}`;
         
           // Notify the student to join the breakout room
           const studentConnection = users[student.id];
           if (studentConnection && studentConnection.ws.readyState === WebSocket.OPEN) {
+            const role = 'student';
+            console.log('Sending join breakout room request to student');
             studentConnection.ws.send(
               JSON.stringify({
                 type: 'join-breakout-room',
                 roomId,
-                instructor,
                 student,
+                instructor,
+                role,
+                breakoutUrl, // Include the breakout URL in the message
               })
             );
+          } else {
+            console.log('Student connection not found or unavailable.');
           }
         
-          console.log(`Breakout room ${roomId} created by ${instructor.username} for ${student.username}`);
           break;
         }
+        
 
         default: {
           // Handle signaling messages (e.g., offer, answer, ice-candidate)
@@ -167,112 +185,87 @@ wss.on('connection', (ws) => {
 });
 
 
+//Breakout room websocket server
+const breakoutRoomUsers = {}; // Track connections in each breakout room
 const breakoutWSS = new WebSocket.Server({ noServer: true });
 breakoutWSS.on('connection', (ws, request) => {
-  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
-  const roomId = pathname.split('/breakout/')[1]; // Extract roomId from the URL
+    const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+    const roomId = pathname.split('/breakout/')[1]; // Extract roomId from the URL
 
-  if (!roomId || !breakoutRoom[roomId]) {
-    console.log(`Invalid breakout room connection attempt for roomId: ${roomId}`);
-    ws.close();
-    return;
-  }
-
-  console.log(`Breakout WebSocket connection opened for roomId: ${roomId}`);
-  const { instructor, student } = breakoutRoom[roomId];
-
-  // Add connection to the WebSocket
-  ws.roomId = roomId;
-  ws.userId = roomId; // Unique identifier for this room connection
-
-  ws.on('message', (message) => {
-    try {
-      const data = JSON.parse(message);
-      console.log(`Breakout room (${roomId}) message:`, data);
-
-      switch (data.type) {
-        case 'breakout-room-info':
-          console.log(`Room Info Received for roomId: ${roomId}`);
-          // Confirm room connection
-          ws.send(JSON.stringify({ 
-            type: 'room-connection-confirmed', 
-            roomId,
-            instructor,
-            student
-          }));
-          break;
-
-        case 'breakout-message': {
-          const sender = data.sender;
-          const timestamp = new Date().toISOString();
-          console.log(`Broadcasting message in breakout room ${roomId} from ${sender}: ${data.text}`);
-
-          // Broadcast to both participants
-          [instructor, student].forEach((participant) => {
-            const targetConnection = users[participant.id]?.ws;
-            if (targetConnection && targetConnection.readyState === WebSocket.OPEN) {
-              targetConnection.send(
-                JSON.stringify({
-                  type: 'breakout-message',
-                  roomId,
-                  sender,
-                  text: data.text,
-                  timestamp,
-                })
-              );
-            }
-          });
-          break;
-        }
-
-        case 'leave-breakout-room': {
-          console.log(`User ${data.userId} leaving breakout room ${roomId}`);
-          // Clean up breakout room if needed
-          if (breakoutRoom[roomId]) {
-            delete breakoutRoom[roomId];
-          }
-          break;
-        }
-
-        case 'end-breakout-room': {
-          console.log(`Ending breakout room ${roomId}`);
-          // Notify both participants
-          [instructor, student].forEach((participant) => {
-            const targetConnection = users[participant.id]?.ws;
-            if (targetConnection && targetConnection.readyState === WebSocket.OPEN) {
-              targetConnection.send(
-                JSON.stringify({
-                  type: 'end-breakout-room',
-                  roomId,
-                })
-              );
-            }
-          });
-          // Clean up breakout room
-          if (breakoutRoom[roomId]) {
-            delete breakoutRoom[roomId];
-          }
-          break;
-        }
-
-        default:
-          console.log(`Unhandled message type in breakout room ${roomId}:`, data.type);
-          break;
-      }
-    } catch (error) {
-      console.error(`Error handling breakout WebSocket message for room ${roomId}:`, error);
-      ws.send(JSON.stringify({
-        type: 'error',
-        message: 'Error processing message',
-        details: error.message
-      }));
+    if (!roomId || !breakoutRoom[roomId]) {
+        console.log(`Invalid breakout room connection attempt for roomId: ${roomId}`);
+        ws.close();
+        return;
     }
-  });
 
-  ws.on('close', () => {
-    console.log(`Breakout WebSocket connection closed for roomId: ${roomId}`);
-  });
+    console.log(`Breakout WebSocket connection opened for roomId: ${roomId}`);
+    const { instructor, student } = breakoutRoom[roomId];
+
+    // Add WebSocket connection to breakoutRoomUsers
+    if (!breakoutRoomUsers[roomId]) {
+        breakoutRoomUsers[roomId] = [];
+    }
+    breakoutRoomUsers[roomId].push({ ws, userId: ws.userId });
+
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            console.log(`Breakout room (${roomId}) message:`, data);
+
+            switch (data.type) {
+                case 'breakout-message': {
+                    const sender = data.sender;
+                    const timestamp = new Date().toISOString();
+                    console.log(`Broadcasting message in breakout room ${roomId} from ${sender}: ${data.text}`);
+
+                    // Broadcast to all connections in this breakout room
+                    breakoutRoomUsers[roomId].forEach((userConnection) => {
+                        if (userConnection.ws.readyState === WebSocket.OPEN) {
+                            userConnection.ws.send(JSON.stringify({
+                                type: 'breakout-message',
+                                roomId,
+                                sender,
+                                text: data.text,
+                                timestamp,
+                            }));
+                        }
+                    });
+                    break;
+                }
+                case 'leave-breakout-room': {
+                    console.log(`User ${data.userId} leaving breakout room ${roomId}`);
+                    breakoutRoomUsers[roomId] = breakoutRoomUsers[roomId].filter(
+                        (user) => user.userId !== data.userId
+                    );
+                    break;
+                }
+                case 'end-breakout-room': {
+                    console.log(`Ending breakout room ${roomId}`);
+                    breakoutRoomUsers[roomId].forEach((userConnection) => {
+                        if (userConnection.ws.readyState === WebSocket.OPEN) {
+                            userConnection.ws.send(JSON.stringify({ type: 'end-breakout-room', roomId }));
+                        }
+                    });
+                    delete breakoutRoomUsers[roomId];
+                    delete breakoutRoom[roomId];
+                    break;
+                }
+                default:
+                    console.log(`Unhandled message type in breakout room ${roomId}:`, data.type);
+                    break;
+            }
+        } catch (error) {
+            console.error(`Error handling breakout WebSocket message for room ${roomId}:`, error);
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
+        }
+    });
+
+    ws.on('close', () => {
+        console.log(`Breakout WebSocket connection closed for roomId: ${roomId}`);
+        breakoutRoomUsers[roomId] = breakoutRoomUsers[roomId].filter((user) => user.ws !== ws);
+    });
 });
+
 
 
 // Upgrade logic for WebSocket connections

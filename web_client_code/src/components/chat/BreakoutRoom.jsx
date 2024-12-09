@@ -11,7 +11,9 @@ const BreakoutRoom = () => {
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef(null);
 
-  const WEBSOCKET_URL = 'ws://localhost:8080/breakout';
+  const localhost =  '';
+
+  const WEBSOCKET_URL = `ws://${localhost}:8080/breakout`;
 
   // Retrieve state from localStorage if not available from location.state
   useEffect(() => {
@@ -20,6 +22,7 @@ const BreakoutRoom = () => {
       if (storedState) {
         const parsedState = JSON.parse(storedState);
         setState(parsedState);
+        console.log("Breakout room state", state);
       } else {
         console.error('No state found in localStorage for this room.');
         navigate('/');
@@ -38,10 +41,6 @@ const BreakoutRoom = () => {
           sendJsonMessage({
             type: 'breakout-room-info',
             roomId: roomId,
-            instructor: { 
-              id: state.instructor.id, 
-              username: state.instructor.username 
-            },
             student: { 
               id: state.student.id, 
               username: state.student.username 

@@ -17,7 +17,7 @@ const ChatInterface = () => {
   const [callRequest, setCallRequest] = useState(null); // To handle incoming calls
   const navigate = useNavigate();
 
-  const localhost =  'localhost';
+  const localhost =  '129.8.222.157';
 
   const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(`ws://${localhost}:8080`, {
     onOpen: () => {
@@ -102,29 +102,76 @@ const ChatInterface = () => {
           break;
 
 
-            case 'join-breakout-room':
-              // Automatically navigate to the breakout room for the student
-              if (role === 'student' && data.roomId && data.instructor && data.student) {
-                // Ensure that the student matches the current user's ID
-                if (data.student.id !== userId) {
-                  console.error('This breakout room is not for the current user.');
-                  return;
-                }
-              
-                // Save the state to localStorage for persistence
-                const stateData = {
-                  instructor: data.instructor,
-                  student: data.student,
-                  roomId: data.roomId,
-                };
-                localStorage.setItem(`breakoutRoomState-${data.roomId}`, JSON.stringify(stateData));
-              
-                // Navigate to the breakout room page with the roomId
-                navigate(`/breakout/${data.roomId}`, {
-                  state: stateData,
-                });
+          case 'join-breakout-room':
+            // Automatically navigate to the breakout room for the student
+            if (role === 'student' && data.roomId && data.student && data.breakoutUrl) {
+              console.log('Received join breakout room request with URL:', data.breakoutUrl);
+          
+              // Ensure that the student matches the current user's ID
+              if (data.student.id !== userId) {
+                console.error('This breakout room is not for the current user.');
+                return;
               }
-              break;
+          
+              // Save the state to localStorage for persistence
+              const stateData = {
+                instructor: data.instructor,
+                student: data.student,
+                roomId: data.roomId,
+                breakoutUrl: data.breakoutUrl,
+              };
+              localStorage.setItem(`breakoutRoomState-${data.roomId}`, JSON.stringify(stateData));
+          
+              // Create a new WebSocket connection for the breakout room
+              const breakoutWebSocket = new WebSocket(data.breakoutUrl);
+          
+              breakoutWebSocket.onopen = () => {
+                console.log('Connected to breakout room:', data.roomId);
+                breakoutWebSocket.send(
+                  JSON.stringify({
+                    type: 'join',
+                    roomId: data.roomId,
+                    userId,
+                  })
+                );
+              };
+          
+              breakoutWebSocket.onmessage = (event) => {
+                const messageData = JSON.parse(event.data);
+                console.log('Message from breakout room:', messageData);
+          
+                // Handle messages specific to the breakout room
+                switch (messageData.type) {
+                  case 'breakout-message':
+                    console.log(`Breakout message: ${messageData.text}`);
+                    break;
+          
+                  case 'end-breakout-room':
+                    console.log('Breakout room ended.');
+                    breakoutWebSocket.close();
+                    break;
+          
+                  default:
+                    console.log('Unhandled breakout room message type:', messageData.type);
+                    break;
+                }
+              };
+          
+              breakoutWebSocket.onclose = () => {
+                console.log('Disconnected from breakout room:', data.roomId);
+              };
+          
+              breakoutWebSocket.onerror = (error) => {
+                console.error('Breakout WebSocket error:', error);
+              };
+          
+              // Optionally navigate to a breakout room page with the roomId
+              navigate(`/breakout/${data.roomId}`, {
+                state: stateData,
+              });
+            }
+            break;
+          
 
           case 'error':
             alert(data.message);
@@ -189,6 +236,8 @@ const ChatInterface = () => {
   
     // Save state to localStorage
     localStorage.setItem(`breakoutRoomState-${roomId}`, JSON.stringify(stateData));
+    // Open in a new tab
+    const breakoutUrl = `/breakout/${roomId}`;
   
     // Notify the server to create the breakout room
     sendJsonMessage({
@@ -196,10 +245,10 @@ const ChatInterface = () => {
       roomId,
       instructor: stateData.instructor,
       student: stateData.student,
+      breakoutUrl:breakoutUrl
     });
   
-    // Open in a new tab
-    const breakoutUrl = `/breakout/${roomId}`;
+ 
     const newTab = window.open(breakoutUrl, '_blank');
     if (newTab) newTab.focus();
   };
@@ -271,7 +320,7 @@ function formatUsername(username) {
 
       <div>
       {/* Other chat interface components */}
-      {/* {userId && (
+   {/*    {userId && (
         <VideoChat 
         sendJsonMessage={sendJsonMessage}
          lastJsonMessage={lastJsonMessage} 
@@ -280,7 +329,7 @@ function formatUsername(username) {
          callRequest={callRequest} // Pass the call request to VideoChat
          u
          />
-      )} */}
+      )}  */}
       </div>
 
      
