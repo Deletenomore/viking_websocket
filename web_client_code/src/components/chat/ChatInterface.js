@@ -17,7 +17,7 @@ const ChatInterface = () => {
   const [callRequest, setCallRequest] = useState(null); // To handle incoming calls
   const navigate = useNavigate();
 
-  const localhost =  '129.8.222.157';
+  const localhost =  '10.62.77.181';
 
   const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(`ws://${localhost}:8080`, {
     onOpen: () => {

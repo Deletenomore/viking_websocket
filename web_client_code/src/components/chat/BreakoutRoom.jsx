@@ -11,7 +11,21 @@ const BreakoutRoom = () => {
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef(null);
 
-  const localhost =  '';
+  // Set localhost value - use window.location.hostname to get the current host
+  const localhost = window.location.hostname || 'localhost';
+
+  // Determine current user based on state
+  const getCurrentUser = useCallback(() => {
+    if (!state) return null;
+    
+    // Check if the current user is the instructor or student
+    if (state.instructor && window.opener) {
+      return state.instructor;
+    } else if (state.student) {
+      return state.student;
+    }
+    return null;
+  }, [state]);
 
   const WEBSOCKET_URL = `ws://${localhost}:8080/breakout`;
 
@@ -22,7 +36,7 @@ const BreakoutRoom = () => {
       if (storedState) {
         const parsedState = JSON.parse(storedState);
         setState(parsedState);
-        console.log("Breakout room state", state);
+        console.log("Breakout room state", parsedState);
       } else {
         console.error('No state found in localStorage for this room.');
         navigate('/');
@@ -36,15 +50,13 @@ const BreakoutRoom = () => {
     {
       onOpen: () => {
         console.log('WebSocket connection established for breakout room');
-        if (state && roomId) {
-          // Send initial room connection info
+        const currentUser = getCurrentUser();
+        if (currentUser && roomId) {
           sendJsonMessage({
             type: 'breakout-room-info',
             roomId: roomId,
-            student: { 
-              id: state.student.id, 
-              username: state.student.username 
-            },
+            userId: currentUser.id,
+            username: currentUser.username
           });
         }
       },
@@ -102,29 +114,36 @@ const BreakoutRoom = () => {
     const trimmedMessage = inputMessage.trim();
     if (!trimmedMessage || !state) return;
 
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+      console.error('Cannot determine current user');
+      return;
+    }
+
     sendJsonMessage({
       type: 'breakout-message',
       roomId,
-      sender: state.instructor.username,
+      sender: currentUser.username,
       text: trimmedMessage,
       timestamp: new Date().toISOString(),
     });
 
     setInputMessage('');
-  }, [inputMessage, roomId, sendJsonMessage, state]);
+  }, [inputMessage, roomId, sendJsonMessage, state, getCurrentUser]);
 
   // Leave breakout room handler
   const handleLeaveBreakoutRoom = useCallback(() => {
-    if (readyState === WebSocket.OPEN && state) {
+    const currentUser = getCurrentUser();
+    if (readyState === WebSocket.OPEN && currentUser) {
       sendJsonMessage({
         type: 'leave-breakout-room',
         roomId,
-        userId: state.instructor.id,
+        userId: currentUser.id,
       });
     }
 
     navigate('/');
-  }, [roomId, sendJsonMessage, state, navigate, readyState]);
+  }, [roomId, sendJsonMessage, getCurrentUser, navigate, readyState]);
 
   // Prevent rendering until state is loaded
   if (!state || !state.instructor || !state.student) {
@@ -144,7 +163,9 @@ const BreakoutRoom = () => {
           {messages.map((message, index) => (
             <div
               key={index}
-              className={`message ${message.sender === state.instructor.username ? 'sent' : 'received'}`}
+              className={`message ${
+                message.sender === getCurrentUser()?.username ? 'sent' : 'received'
+              }`}
             >
               <strong>{message.sender}:</strong> {message.text}
             </div>
