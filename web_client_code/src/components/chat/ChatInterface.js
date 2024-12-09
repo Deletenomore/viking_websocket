@@ -54,8 +54,9 @@ const ChatInterface = () => {
           break;
 
         case 'update-users':
-          console.log(participants);
+       
           setParticipants(data.users);
+          console.log(participants);
 
           break;
 
@@ -67,6 +68,63 @@ const ChatInterface = () => {
             console.log(`Incoming call from ${data.senderId}`);
             setCallRequest(data.senderId); // Store the caller's ID
             break;
+
+          case 'create-breakout-room':
+          // Handle breakout room creation for both instructor and student
+          if (data.roomId && data.instructor && data.student) {
+            // Check if the current user is either the instructor or the student
+            const isInstructor = data.instructor.id === userId;
+            const isStudent = data.student.id === userId;
+
+            if (isInstructor || isStudent) {
+              const stateData = {
+                instructor: data.instructor,
+                student: data.student,
+                roomId: data.roomId,
+              };
+
+              // Save state to localStorage
+              localStorage.setItem(`breakoutRoomState-${data.roomId}`, JSON.stringify(stateData));
+
+              // Open breakout room
+              const breakoutUrl = `/breakout/${data.roomId}`;
+              
+              if (isInstructor) {
+                // Open in a new tab for instructor
+                const newTab = window.open(breakoutUrl, '_blank');
+                if (newTab) newTab.focus();
+              } else {
+                // Navigate in the current window for student
+                navigate(breakoutUrl, { state: stateData });
+              }
+            }
+          }
+          break;
+
+
+            case 'join-breakout-room':
+              // Automatically navigate to the breakout room for the student
+              if (role === 'student' && data.roomId && data.instructor && data.student) {
+                // Ensure that the student matches the current user's ID
+                if (data.student.id !== userId) {
+                  console.error('This breakout room is not for the current user.');
+                  return;
+                }
+              
+                // Save the state to localStorage for persistence
+                const stateData = {
+                  instructor: data.instructor,
+                  student: data.student,
+                  roomId: data.roomId,
+                };
+                localStorage.setItem(`breakoutRoomState-${data.roomId}`, JSON.stringify(stateData));
+              
+                // Navigate to the breakout room page with the roomId
+                navigate(`/breakout/${data.roomId}`, {
+                  state: stateData,
+                });
+              }
+              break;
 
           case 'error':
             alert(data.message);
@@ -120,11 +178,41 @@ const ChatInterface = () => {
       return;
     }
   
-     // Navigate to BreakoutRoom with the selected student
-  navigate('/breakout', {
-    state: { instructor: { id: userId, username }, student },
-  });
+    const roomId = `${username}-${student.username}`;
+    console.log('Creating breakout room with ID:', roomId);
+  
+    const stateData = {
+      instructor: { id: userId, username },
+      student: { id: student.id, username: student.username },
+      roomId,
+    };
+  
+    // Save state to localStorage
+    localStorage.setItem(`breakoutRoomState-${roomId}`, JSON.stringify(stateData));
+  
+    // Notify the server to create the breakout room
+    sendJsonMessage({
+      type: 'create-breakout-room',
+      roomId,
+      instructor: stateData.instructor,
+      student: stateData.student,
+    });
+  
+    // Open in a new tab
+    const breakoutUrl = `/breakout/${roomId}`;
+    const newTab = window.open(breakoutUrl, '_blank');
+    if (newTab) newTab.focus();
+  };
+  
+
+//Disconnect WebSocekt when join another room
+const disconnectWebSocket = () => {
+  if (readyState === WebSocket.OPEN) {
+    console.log('Disconnecting from public WebSocket');
+    sendJsonMessage({ type: 'disconnect', userId });
+  }
 };
+
   
 function capitalizeFirstLetter(string) {
   if (!string) return 'Unknown Role'; // Handle undefined or null roles
@@ -183,7 +271,7 @@ function formatUsername(username) {
 
       <div>
       {/* Other chat interface components */}
-      {userId && (
+      {/* {userId && (
         <VideoChat 
         sendJsonMessage={sendJsonMessage}
          lastJsonMessage={lastJsonMessage} 
@@ -192,7 +280,7 @@ function formatUsername(username) {
          callRequest={callRequest} // Pass the call request to VideoChat
          u
          />
-      )}
+      )} */}
       </div>
 
      

@@ -6,14 +6,14 @@ import BreakoutRoom from './components//chat/BreakoutRoom';
 
 
 const App = () => {
-
+;
 
   return (
       <Router>
       <Routes>
         <Route path="/" element={<CreateRoom />} />
         <Route path="/chat" element={<ChatInterface />} />
-        <Route path="/breakout" element={<BreakoutRoom />} />
+        <Route path="/breakout/:roomId" element={<BreakoutRoom />} />
       </Routes>
     </Router>
   );

@@ -62,29 +62,12 @@ const VideoChat = ({ sendJsonMessage, lastJsonMessage, userId, username, callReq
   useEffect(() => {
     const initMediaStream = async () => {
       try {
-        // Enumerate available media devices
-        const devices = await navigator.mediaDevices.enumerateDevices();
-  
-        // Find a video input device (camera) and audio input device (microphone)
-        const videoDevice = devices.find((device) => device.kind === "videoinput");
-        const audioDevice = devices.find((device) => device.kind === "audioinput");
-  
-        // Set up constraints based on available devices
-        const constraints = {
-          video: videoDevice ? { width: 1280, height: 720 } : false,
-          audio: !!audioDevice,
-        };
-  
-        console.log("getUserMedia start with constraints:", constraints);
-  
-        // Request media stream with the constraints
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-  
-        // Assign the stream to the local video element and the localStream reference
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-        localStream.current = stream;
+          localStream.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = localStream.current;
+          }
+          localStream.current.getAudioTracks().forEach((track) => (track.enabled = false));
+          localStream.current.getVideoTracks().forEach((track) => (track.enabled = false));
   
         // Optionally, disable tracks initially (e.g., for muting)
         toggleTracks(false);

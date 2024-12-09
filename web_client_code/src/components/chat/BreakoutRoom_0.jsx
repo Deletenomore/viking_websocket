@@ -3,15 +3,16 @@ import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import useWebSocket from 'react-use-websocket';
 
 const BreakoutRoom = () => {
-  const { roomId } = useParams();
+  const { roomId } = useParams(); // Extract roomId from the URL
   const navigate = useNavigate();
   const location = useLocation();
   const [state, setState] = useState(location.state || null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
+  const [participants, setParticipants] = useState([]);
   const messagesEndRef = useRef(null);
 
-  const WEBSOCKET_URL = 'ws://localhost:8080/breakout';
+  const localhost = 'localhost';
 
   // Retrieve state from localStorage if not available from location.state
   useEffect(() => {
@@ -19,33 +20,27 @@ const BreakoutRoom = () => {
       const storedState = localStorage.getItem(`breakoutRoomState-${roomId}`);
       if (storedState) {
         const parsedState = JSON.parse(storedState);
-        setState(parsedState);
+        console.log('Retrieved state from localStorage:', parsedState);
+        setState(parsedState); // Set the retrieved state
       } else {
         console.error('No state found in localStorage for this room.');
-        navigate('/');
+        navigate('/'); // Redirect to the main chat room
       }
     }
   }, [state, roomId, navigate]);
 
   // WebSocket hook
   const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(
-    `${WEBSOCKET_URL}/${roomId}`,
+    `ws://${localhost}:8080/breakout/${roomId}`,
     {
       onOpen: () => {
         console.log('WebSocket connection established for breakout room');
         if (state && roomId) {
-          // Send initial room connection info
           sendJsonMessage({
             type: 'breakout-room-info',
             roomId: roomId,
-            instructor: { 
-              id: state.instructor.id, 
-              username: state.instructor.username 
-            },
-            student: { 
-              id: state.student.id, 
-              username: state.student.username 
-            },
+            instructor: { id: state.instructor.id, username: state.instructor.username },
+            student: { id: state.student.id, username: state.student.username },
           });
         }
       },
@@ -55,7 +50,7 @@ const BreakoutRoom = () => {
       onError: (event) => {
         console.error('WebSocket error:', event);
       },
-      shouldReconnect: () => true,
+      shouldReconnect: () => true, // Automatically attempt to reconnect
     }
   );
 
@@ -76,15 +71,16 @@ const BreakoutRoom = () => {
           ]);
           break;
 
+        case 'update-participants':
+          setParticipants(data.participants);
+          console.log('Updated participants:', data.participants);
+          break;
+
         case 'end-breakout-room':
           if (data.roomId === roomId) {
             alert('The breakout room has been ended.');
             handleLeaveBreakoutRoom();
           }
-          break;
-
-        case 'room-connection-confirmed':
-          console.log('Room connection confirmed:', data);
           break;
 
         default:
@@ -111,6 +107,10 @@ const BreakoutRoom = () => {
       timestamp: new Date().toISOString(),
     });
 
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { sender: 'Me', text: trimmedMessage },
+    ]);
     setInputMessage('');
   }, [inputMessage, roomId, sendJsonMessage, state]);
 
@@ -124,7 +124,7 @@ const BreakoutRoom = () => {
       });
     }
 
-    navigate('/');
+    navigate('/'); // Navigate back to main interface
   }, [roomId, sendJsonMessage, state, navigate, readyState]);
 
   // Prevent rendering until state is loaded
@@ -145,7 +145,7 @@ const BreakoutRoom = () => {
           {messages.map((message, index) => (
             <div
               key={index}
-              className={`message ${message.sender === state.instructor.username ? 'sent' : 'received'}`}
+              className={`message ${message.sender === 'Me' ? 'sent' : 'received'}`}
             >
               <strong>{message.sender}:</strong> {message.text}
             </div>
