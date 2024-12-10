@@ -13,6 +13,7 @@ app.get('/', (req, res) => {
 // Define the hostname and port
 const HOSTNAME = '0.0.0.0'; // Use '0.0.0.0' to accept requests from any IP
 const PORT = 8080;
+const WSSPORT = 443;
 
 // Global dictionary to track all users
 const users = {}; // Maps userId to WebSocket and username
@@ -31,10 +32,10 @@ webServer.listen(PORT,HOSTNAME, () => {
 const wss = new WebSocket.Server({ noServer:true});
 wss.on('connection', (ws) => {
   const userId = uuidv4(); // Generate a unique userId for the user
-  console.log(`WebSocket connection opened for userId: ${userId}`);
+  console.log(`WebSocket connection opened for userId: ${ userId}`);
 
   ws.on('close', () => {
-    console.log(`WebSocket connection closed for userId: ${userId}`);
+    console.log(`WebSocket connection closed for user: ${ users[userId].role}: ${ users[userId].username}`);
     delete users[userId];
     broadcastUserList();
   });
@@ -142,6 +143,7 @@ wss.on('connection', (ws) => {
           // Handle signaling messages (e.g., offer, answer, ice-candidate)
           const recipientId = data.recipientId;
           const recipient = users[recipientId];
+          console.log('Video signal type', data.type);
           if (recipient && recipient.ws.readyState === WebSocket.OPEN) {
             recipient.ws.send(JSON.stringify(data));
           } else {

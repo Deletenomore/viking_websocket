@@ -65,9 +65,10 @@ const ChatInterface = () => {
           setMessages((prevMessages) => [...prevMessages, { sender: data.sender, text: data.text, timestamp: data.timestamp }]);
           break;
           
-          case "initiate-call":
+        case "initiate-call":
             console.log(`Incoming call from ${data.senderId}`);
             setCallRequest(data.senderId); // Store the caller's ID
+            console.log('Call request from chatinterface', callRequest);
             break;
 
           case 'create-breakout-room':
@@ -210,6 +211,7 @@ const ChatInterface = () => {
 
   
   const initiateCall = (remoteUserId) => {
+    // console.log('initialCall successfully');
     if (!remoteUserId || remoteUserId === userId) {
       alert('Cannot call yourself.');
       return;
@@ -217,6 +219,7 @@ const ChatInterface = () => {
     sendJsonMessage({
       type: 'initiate-call',
       recipientId: remoteUserId,
+      sendId:userId
     });
   };
 
@@ -275,86 +278,90 @@ function formatUsername(username) {
 }
 
 return (
-  <div className="chat-container">
-    <div className="chat-header">
-      <h1>Chat Room</h1>
-      <h3 className="welcome-message">Welcome, {username}</h3>
-    </div>
-
-    {webSocketError && <div className="error-message">{webSocketError}</div>}
-
-    <div className="participants-section">
-      <h2>Participants:</h2>
-      <ul className="participants-list">
-        {participants.map((participant) => (
-          <li key={participant.id}>
-            <div className="participant-info">
-              <span className="participant-role">
-                {capitalizeFirstLetter(participant.role)+': '}
-              </span>
-              {formatUsername(participant.username || 'Unknown User')}
-            </div>
-            <div className="participant-actions">
-              {role === 'instructor' && participant.id !== userId && (
-                <button onClick={() => createBreakout(participant)}>
-                  Create Breakout Room
-                </button>
-              )}
-              {participant.id !== userId && (
-                <button onClick={() => initiateCall(participant.id)}>
-                  Call
-                </button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-
-    <div className="messages-container">
-      <h2>Messages:</h2>
-      {messages.map((message, index) => (
-        <div key={index} className="message">
-          <span className="message-sender">{message.sender}</span>
-          <span className="message-timestamp">
-            ({new Date(message.timestamp).toLocaleTimeString()})
-          </span>
-          : {message.text}
-        </div>
-      ))}
-    </div>
-
-    <div className="message-input-section">
-      <input
-        type="text"
-        placeholder="Type a message"
-        value={inputMessage}
-        onChange={(e) => setInputMessage(e.target.value)}
-        className="message-input"
-      />
-      <button onClick={handleSendMessage} className="send-button">
-        Send
-      </button>
-    </div>
-    
-      <div>
-      {/* Other chat interface components */}
-   {/*    {userId && (
-        <VideoChat 
-        sendJsonMessage={sendJsonMessage}
-         lastJsonMessage={lastJsonMessage} 
-         userId={userId} 
-         username={username}
-         callRequest={callRequest} // Pass the call request to VideoChat
-         u
-         />
-      )}  */}
+  <div className="full-height">
+    <div className="chat-container">
+      {/* Header Section */}
+      <div className="chat-header">
+        <h1>Chat Room</h1>
+        <h3 className="welcome-message">Welcome, {username || "Guest"}</h3>
       </div>
 
-     
+      {/* WebSocket Error */}
+      {webSocketError && <div className="error-message">{webSocketError}</div>}
+
+      {/* Participants Section */}
+      <div className="participants-section">
+        <h2>Participants:</h2>
+        <ul className="participants-list">
+          {participants.map((participant) => (
+            <li key={participant.id}>
+              <div className="participant-info">
+                <span className="participant-role">
+                  {capitalizeFirstLetter(participant.role) + ": "}
+                </span>
+                {formatUsername(participant.username || "Unknown User")}
+              </div>
+              <div className="participant-actions">
+                {role === "instructor" && participant.id !== userId && (
+                  <button onClick={() => createBreakout(participant)}>
+                    Create Breakout Room
+                  </button>
+                )}
+                {participant.id !== userId && (
+                  <button onClick={() => initiateCall(participant.id)}>
+                    Call
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Messages Section */}
+      <div className="messages-container">
+        <h2>Messages:</h2>
+        {messages.map((message, index) => (
+          <div key={index} className="message">
+            <span className="message-sender">{message.sender}</span>
+            <span className="message-timestamp">
+              ({new Date(message.timestamp).toLocaleTimeString()})
+            </span>
+            : {message.text}
+          </div>
+        ))}
+      </div>
+
+      {/* Message Input Section */}
+      <div className="message-input-section">
+        <input
+          type="text"
+          placeholder="Type a message"
+          value={inputMessage}
+          onChange={(e) => setInputMessage(e.target.value)}
+          className="message-input"
+        />
+        <button onClick={handleSendMessage} className="send-button">
+          Send
+        </button>
+      </div>
+
+      {/* Video Chat Component (Optional) */}
+      <div>
+        {userId && (
+          <VideoChat
+            sendJsonMessage={sendJsonMessage}
+            lastJsonMessage={lastJsonMessage}
+            userId={userId}
+            username={username}
+            callRequest={callRequest} // Pass the call request to VideoChat
+          />
+        )}
+      </div>
     </div>
-      
-  );
+  </div>
+);
+
 };
 
 export default ChatInterface;

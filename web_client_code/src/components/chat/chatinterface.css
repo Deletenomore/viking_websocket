@@ -4,33 +4,50 @@ body {
   background-color: #f4f6f9; /* Light gray background */
   margin: 0;
   padding: 0;
+  min-height: 100vh; /* Ensure the body fills the viewport */
+  /* display: flex;
+  flex-direction: column; Allow stacking of children */
 }
 
-.chat-container {
-  max-width: 1200px;
-  margin: 20px auto;
-  padding: 20px;
-  background-color: #ffffff; /* White background */
-  border-radius: 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+
+
+/* Messages Section */
+.messages-container {
+  background-color: #f1f4f8; /* Light gray background for messages */
+  border-radius: 10px; /* Rounded corners */
+  padding: 15px;
+  height: 60vh; /* Adjust height dynamically */
+  overflow-y: auto; /* Enable scrolling for messages */
+  margin-bottom: 20px;
+  border: 1px solid #d3dce6; /* Subtle border */
 }
+
+/* Participants Section */
+.participants-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto; /* Enable scrolling if there are many participants */
+  max-height: 20vh; /* Restrict height dynamically */
+}
+
 
 /* Header Section */
 .chat-header {
-  padding: 10px 0;
-  border-bottom: 2px solid #e0e0e0;
-  margin-bottom: 20px;
+  padding: 20px 0; /* Larger padding */
+  border-bottom: 3px solid #e0e0e0; /* Thicker border */
+  margin-bottom: 30px;
   text-align: center;
 }
 
 .chat-header h1 {
-  font-size: 24px;
+  font-size: 36px; /* Increased font size */
   color: #3498db; /* Blue for the main title */
   margin: 0;
 }
 
 .welcome-message {
-  font-size: 16px;
+  font-size: 20px; /* Larger font size */
   color: #666; /* Muted gray */
 }
 
@@ -39,38 +56,33 @@ body {
   color: #e74c3c; /* Red for errors */
   background-color: #fdecea; /* Light red background */
   border: 1px solid #f5c6cb;
-  padding: 10px;
-  border-radius: 5px;
-  margin-bottom: 20px;
+  padding: 15px; /* Larger padding */
+  border-radius: 8px; /* Larger border-radius */
+  margin-bottom: 30px;
   text-align: center;
 }
 
 /* Participants Section */
 .participants-section {
-  margin-bottom: 20px;
+  margin-bottom: 30px; /* Increased margin */
 }
 
 .participants-section h2 {
-  font-size: 20px;
+  font-size: 28px; /* Larger font size */
   font-weight: bold;
   color: #3498db;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
-.participants-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
 
 .participants-list li {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
-  margin-bottom: 10px;
+  padding: 15px; /* Larger padding */
+  margin-bottom: 15px;
   background-color: #f9f9f9;
-  border-radius: 8px;
+  border-radius: 12px; /* Larger border-radius */
   border: 1px solid #d3dce6;
   transition: background-color 0.3s ease;
 }
@@ -80,7 +92,7 @@ body {
 }
 
 .participant-info {
-  font-size: 14px;
+  font-size: 18px; /* Larger font size */
   color: #333;
 }
 
@@ -90,13 +102,13 @@ body {
 }
 
 .participant-actions button {
-  padding: 8px 12px;
+  padding: 12px 16px; /* Larger button size */
   background-color: #3498db; /* Blue button */
   color: #fff;
   border: none;
-  border-radius: 5px;
+  border-radius: 8px; /* Larger border-radius */
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px; /* Larger font size */
   transition: background-color 0.3s ease;
 }
 
@@ -107,29 +119,29 @@ body {
 /* Messages Section */
 .messages-container {
   background-color: #f1f4f8;
-  border-radius: 10px;
-  padding: 15px;
-  height: 400px;
+  border-radius: 15px; /* Larger border-radius */
+  padding: 20px; /* Larger padding */
+  height: 500px; /* Increased height */
   overflow-y: auto;
-  margin-bottom: 20px;
+  margin-bottom: 30px;
   border: 1px solid #d3dce6;
 }
 
 .messages-container h2 {
-  font-size: 20px;
+  font-size: 28px; /* Larger font size */
   font-weight: bold;
   color: #3498db;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
 
 .message {
-  padding: 10px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  max-width: 80%;
+  padding: 15px; /* Larger padding */
+  border-radius: 10px; /* Larger border-radius */
+  margin-bottom: 15px;
+  max-width: 90%; /* Increased width */
   word-wrap: break-word;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 18px; /* Larger font size */
+  line-height: 1.8; /* Increased line spacing */
 }
 
 .message-sender {
@@ -138,7 +150,7 @@ body {
 }
 
 .message-timestamp {
-  font-size: 12px;
+  font-size: 14px; /* Larger font size */
   color: #888;
   margin-left: 5px;
 }
@@ -155,37 +167,63 @@ body {
   align-self: flex-start;
 }
 
-/* Message Input Section */
-.message-input-section {
-  display: flex;
-  margin-top: 20px;
-}
+
 
 .message-input {
   flex-grow: 1;
-  padding: 10px;
+  padding: 15px; /* Larger padding */
   border: 1px solid #d3dce6;
-  border-radius: 5px 0 0 5px;
-  font-size: 14px;
+  border-radius: 8px 0 0 8px; /* Larger border-radius */
+  font-size: 18px; /* Larger font size */
 }
 
 .message-input:focus {
   border-color: #3498db;
-  box-shadow: 0 0 4px rgba(52, 152, 219, 0.4);
+  box-shadow: 0 0 8px rgba(52, 152, 219, 0.4);
   outline: none;
 }
 
 .send-button {
-  padding: 10px 20px;
+  padding: 15px 30px; /* Larger button size */
   background-color: #3498db;
   color: #fff;
   border: none;
-  border-radius: 0 5px 5px 0;
-  font-size: 14px;
+  border-radius: 0 8px 8px 0; /* Larger border-radius */
+  font-size: 18px; /* Larger font size */
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
 
 .send-button:hover {
   background-color: #2980b9;
+}
+
+.full-height {
+  min-height: 80vh; /* Make sure it fills the viewport */
+  display: flex;
+  flex-direction: column;
+  margin-top: 5%;
+  align-items: center;    /* Vertically align */
+  
+}
+
+.chat-container {
+  flex-grow: 1; /* Allow it to expand */
+  margin: auto;
+  padding: 60px;
+  max-width: 1400px;
+  width: 70vw;
+  overflow-y: auto;
+  
+
+}
+
+.participants-section, .messages-container {
+  max-height: 30vh; /* Restrict their height */
+  overflow-y: auto; /* Enable scrolling */
+}
+
+.message-input-section {
+  display: flex;
+  gap: 10px; /* Add spacing between input and button */
 }
