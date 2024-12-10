@@ -278,88 +278,111 @@ function formatUsername(username) {
 }
 
 return (
-  <div className="full-height">
-    <div className="chat-container">
-      {/* Header Section */}
-      <div className="chat-header">
-        <h1>Chat Room</h1>
-        <h3 className="welcome-message">Welcome, {username || "Guest"}</h3>
+<div id="chat-interface-container" className="full-height">
+  <div id="chat-container" className="chat-container">
+    {/* Header Section */}
+    <div id="chat-header" className="chat-header">
+      <h1 id="chat-title">Chat Room</h1>
+      <h3 id="chat-welcome-message" className="welcome-message">
+        Welcome, {username || 'Guest'}
+      </h3>
+    </div>
+
+    {/* WebSocket Error */}
+    {webSocketError && (
+      <div id="chat-error-message" className="error-message">
+        {webSocketError}
       </div>
+    )}
 
-      {/* WebSocket Error */}
-      {webSocketError && <div className="error-message">{webSocketError}</div>}
-
-      {/* Participants Section */}
-      <div className="participants-section">
-        <h2>Participants:</h2>
-        <ul className="participants-list">
-          {participants.map((participant) => (
-            <li key={participant.id}>
-              <div className="participant-info">
-                <span className="participant-role">
-                  {capitalizeFirstLetter(participant.role) + ": "}
-                </span>
-                {formatUsername(participant.username || "Unknown User")}
-              </div>
-              <div className="participant-actions">
-                {role === "instructor" && participant.id !== userId && (
-                  <button onClick={() => createBreakout(participant)}>
-                    Create Breakout Room
-                  </button>
-                )}
-                {participant.id !== userId && (
-                  <button onClick={() => initiateCall(participant.id)}>
-                    Call
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Messages Section */}
-      <div className="messages-container">
-        <h2>Messages:</h2>
-        {messages.map((message, index) => (
-          <div key={index} className="message">
-            <span className="message-sender">{message.sender}</span>
-            <span className="message-timestamp">
-              ({new Date(message.timestamp).toLocaleTimeString()})
-            </span>
-            : {message.text}
-          </div>
+    {/* Participants Section */}
+    <div id="chat-participants-section" className="participants-section">
+      <h2 id="chat-participants-title">Participants:</h2>
+      <ul id="chat-participants-list" className="participants-list">
+        {participants.map((participant) => (
+          <li key={participant.id} id={`participant-${participant.id}`}>
+            <div id={`participant-info-${participant.id}`} className="participant-info">
+              <span id={`participant-role-${participant.id}`} className="participant-role">
+                {capitalizeFirstLetter(participant.role) + ': '}
+              </span>
+              {formatUsername(participant.username || 'Unknown User')}
+            </div>
+            <div id={`participant-actions-${participant.id}`} className="participant-actions">
+              {role === 'instructor' && participant.id !== userId && (
+                <button
+                  id={`create-breakout-${participant.id}`}
+                  onClick={() => createBreakout(participant)}
+                >
+                  Create Breakout Room
+                </button>
+              )}
+              {participant.id !== userId && (
+                <button
+                  id={`call-button-${participant.id}`}
+                  onClick={() => initiateCall(participant.id)}
+                >
+                  Call
+                </button>
+              )}
+            </div>
+          </li>
         ))}
-      </div>
+      </ul>
+    </div>
 
-      {/* Message Input Section */}
-      <div className="message-input-section">
-        <input
-          type="text"
-          placeholder="Type a message"
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          className="message-input"
+    {/* Messages Section */}
+    <div id="chat-messages-section" className="messages-container">
+      <h2 id="chat-messages-title">Messages:</h2>
+      {messages.map((message, index) => (
+        <div
+          key={index}
+          id={`chat-message-${index}`}
+          className="message"
+        >
+          <span id={`message-sender-${index}`} className="message-sender">
+            {message.sender}
+          </span>
+          <span id={`message-timestamp-${index}`} className="message-timestamp">
+            ({new Date(message.timestamp).toLocaleTimeString()})
+          </span>
+          : {message.text}
+        </div>
+      ))}
+    </div>
+
+    {/* Message Input Section */}
+    <div id="chat-message-input-section" className="message-input-section">
+      <input
+        id="chat-input-field"
+        type="text"
+        placeholder="Type a message"
+        value={inputMessage}
+        onChange={(e) => setInputMessage(e.target.value)}
+        className="message-input"
+      />
+      <button
+        id="chat-send-button"
+        onClick={handleSendMessage}
+        className="send-button"
+      >
+        Send
+      </button>
+    </div>
+
+    {/* Video Chat Component */}
+    <div id="video-chat-section" className="video">
+      {userId && (
+        <VideoChat
+          sendJsonMessage={sendJsonMessage}
+          lastJsonMessage={lastJsonMessage}
+          userId={userId}
+          username={username}
+          callRequest={callRequest}
         />
-        <button onClick={handleSendMessage} className="send-button">
-          Send
-        </button>
-      </div>
-
-      {/* Video Chat Component (Optional) */}
-      <div>
-        {userId && (
-          <VideoChat
-            sendJsonMessage={sendJsonMessage}
-            lastJsonMessage={lastJsonMessage}
-            userId={userId}
-            username={username}
-            callRequest={callRequest} // Pass the call request to VideoChat
-          />
-        )}
-      </div>
+      )}
     </div>
   </div>
+</div>
 );
 
 };

@@ -152,46 +152,56 @@ const BreakoutRoom = () => {
   }
 
   return (
-    <div className="breakout-room-container">
-      <h2>Breakout Room</h2>
-      <div className="room-participants">
-        <h3>Instructor: {state.instructor.username}</h3>
-        <h3>Student: {state.student.username}</h3>
-      </div>
+    <div id="breakout-room-container" className="breakout-room-container">
+  <h2 id="breakout-room-header">Breakout Room</h2>
+  <div id="breakout-room-participants" className="room-participants">
+    <h3 id="breakout-room-instructor">
+      Instructor: {state.instructor.username}
+    </h3>
+    <h3 id="breakout-room-student">Student: {state.student.username}</h3>
+  </div>
 
-      <div className="chat-container">
-        <div className="messages-list">
-          {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`message ${
-                message.sender === getCurrentUser()?.username ? 'sent' : 'received'
-              }`}
-            >
-              <strong>{message.sender}:</strong> {message.text}
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
+  <div id="breakout-room-chat" className="chat-container">
+    <div id="breakout-room-messages" className="messages-list">
+      {messages.map((message, index) => (
+        <div
+          key={index}
+          id={`breakout-message-${index}`}
+          className={`message ${
+            message.sender === getCurrentUser()?.username ? 'sent' : 'received'
+          }`}
+        >
+          <strong>{message.sender}:</strong> {message.text}
         </div>
-
-        <div className="message-input">
-          <input
-            type="text"
-            placeholder="Type a message"
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-          />
-          <button onClick={handleSendMessage}>Send</button>
-        </div>
-      </div>
-
-      <div className="room-controls">
-        <button onClick={handleLeaveBreakoutRoom} className="leave-room-btn">
-          Leave Room
-        </button>
-      </div>
+      ))}
+      <div ref={messagesEndRef} />
     </div>
+
+    <div id="breakout-room-input" className="message-input">
+      <input
+        id="breakout-room-input-field"
+        type="text"
+        placeholder="Type a message"
+        value={inputMessage}
+        onChange={(e) => setInputMessage(e.target.value)}
+        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+      />
+      <button id="breakout-room-send-button" onClick={handleSendMessage}>
+        Send
+      </button>
+    </div>
+  </div>
+
+  <div id="breakout-room-controls" className="room-controls">
+    <button
+      id="breakout-room-leave-button"
+      onClick={handleLeaveBreakoutRoom}
+      className="leave-room-btn"
+    >
+      Leave Room
+    </button>
+  </div>
+</div>
   );
 };
 
