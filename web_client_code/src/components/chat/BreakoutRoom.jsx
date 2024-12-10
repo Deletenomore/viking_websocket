@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import useWebSocket from 'react-use-websocket';
+import '../chat/breakoutroom.css'
 
 const BreakoutRoom = () => {
   const { roomId } = useParams();

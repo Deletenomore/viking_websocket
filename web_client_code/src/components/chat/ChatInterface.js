@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import useWebSocket from 'react-use-websocket';
 import VideoChat from '../chat/VideoChat';
 import { useNavigate } from 'react-router-dom';
+import '../chat/chatinterface.css'
 
 
 const ChatInterface = () => {
@@ -17,7 +18,7 @@ const ChatInterface = () => {
   const [callRequest, setCallRequest] = useState(null); // To handle incoming calls
   const navigate = useNavigate();
 
-  const localhost =  '10.62.77.181';
+  const localhost =  'localhost';
 
   const { sendJsonMessage, lastJsonMessage, readyState } = useWebSocket(`ws://${localhost}:8080`, {
     onOpen: () => {
@@ -273,51 +274,69 @@ function formatUsername(username) {
   return username.replace(/([a-z])([A-Z])/g, '$1 $2'); // Add spaces between camelCase words
 }
 
-  return (
-    <div style={{ padding: '20px' }}>
+return (
+  <div className="chat-container">
+    <div className="chat-header">
       <h1>Chat Room</h1>
-      <h3>Welcome, {username}</h3>
+      <h3 className="welcome-message">Welcome, {username}</h3>
+    </div>
 
-      {webSocketError && <div style={{ color: 'red' }}>{webSocketError}</div>}
+    {webSocketError && <div className="error-message">{webSocketError}</div>}
 
-      <div>
-        <h2>Participants:</h2>
-        <ul>
-          {participants.map((participant) => (
-            <li key={participant.id}>
-              <strong>{capitalizeFirstLetter(participant.role)}</strong>: {formatUsername(participant.username || 'Unknown User')}
+    <div className="participants-section">
+      <h2>Participants:</h2>
+      <ul className="participants-list">
+        {participants.map((participant) => (
+          <li key={participant.id}>
+            <div className="participant-info">
+              <span className="participant-role">
+                {capitalizeFirstLetter(participant.role)+': '}
+              </span>
+              {formatUsername(participant.username || 'Unknown User')}
+            </div>
+            <div className="participant-actions">
               {role === 'instructor' && participant.id !== userId && (
-              <button onClick={() => createBreakout(participant)}>Create Breakout Room</button>
-            )}
-              {participant.id !== userId && (
-                <button onClick={() => initiateCall(participant.id)}>Call</button>
+                <button onClick={() => createBreakout(participant)}>
+                  Create Breakout Room
+                </button>
               )}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div style={{ border: '1px solid #ccc', padding: '10px', height: '300px', overflowY: 'scroll' }}>
-        <h2>Messages:</h2>
-        {messages.map((message, index) => (
-          <p key={index}>
-            <strong>{message.sender}</strong> ({new Date(message.timestamp).toLocaleTimeString()}): {message.text}
-          </p>
+              {participant.id !== userId && (
+                <button onClick={() => initiateCall(participant.id)}>
+                  Call
+                </button>
+              )}
+            </div>
+          </li>
         ))}
-      </div>
+      </ul>
+    </div>
 
+    <div className="messages-container">
+      <h2>Messages:</h2>
+      {messages.map((message, index) => (
+        <div key={index} className="message">
+          <span className="message-sender">{message.sender}</span>
+          <span className="message-timestamp">
+            ({new Date(message.timestamp).toLocaleTimeString()})
+          </span>
+          : {message.text}
+        </div>
+      ))}
+    </div>
 
-      <div>
-        <input
-          type="text"
-          placeholder="Type a message"
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          style={{ margin: '10px', width: '80%' }}
-        />
-        <button onClick={handleSendMessage}>Send</button>
-      </div>
-
+    <div className="message-input-section">
+      <input
+        type="text"
+        placeholder="Type a message"
+        value={inputMessage}
+        onChange={(e) => setInputMessage(e.target.value)}
+        className="message-input"
+      />
+      <button onClick={handleSendMessage} className="send-button">
+        Send
+      </button>
+    </div>
+    
       <div>
       {/* Other chat interface components */}
    {/*    {userId && (
